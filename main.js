@@ -3,6 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 
+// Maneja los eventos internos de instalación/actualización/desinstalación de Squirrel
+// en Windows. Sin esto, la app nunca queda registrada en "Aplicaciones y características"
+// ni crea bien su acceso directo del menú Inicio — abre normal, pero Windows nunca sabe
+// que está "instalada" de verdad. En Mac esta línea no hace nada (se ignora sola).
+if (require('electron-squirrel-startup')) {
+  app.quit();
+}
+
 const REPO_OWNER = 'SebasHMora';
 const REPO_NAME = 'MetaTrace';
 
