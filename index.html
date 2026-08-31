@@ -645,7 +645,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    ========================================================= */
 
 const STORAGE_KEY = 'cometa_data_v2';
-const APP_VERSION = '0.2 beta'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
+const APP_VERSION = '0.4.0'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
 
 function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -1311,6 +1311,7 @@ function viewGuia(){
       <ul class="guide-list">
         <li><b>Tamaño de letra</b> — con los botones "A−" y "A+" al final de la barra lateral puedes agrandar o achicar toda la interfaz.</li>
         <li><b>Instalar MetaTrace como app</b> — en algunas versiones publicadas de MetaTrace, el navegador te puede ofrecer instalarla como una app de escritorio o de celular, con su propio ícono, sin depender de abrir el archivo cada vez.</li>
+        <li><b>Aviso de nueva versión disponible</b> — si usas MetaTrace instalada como app de escritorio (.dmg / .exe), al abrirla revisa en segundo plano si hay una versión más nueva publicada. Si la hay, te avisa con un mensaje y te ofrece abrir la página de descarga en GitHub — nunca se actualiza sola, tú decides si instalar la nueva versión o seguir usando la actual. Esta revisión solo consulta el número de versión más reciente; no envía ningún dato tuyo ni de tu organización, así que no compromete en nada la privacidad de tu información — sigue guardándose exclusivamente en este dispositivo, igual que siempre.</li>
         <li><b>Vaciar todos los datos</b> — borra por completo la información guardada en este dispositivo. Úsalo con cuidado; siempre exporta un respaldo antes.</li>
       </ul>
       <p>¿Te encontraste con una palabra que no entendiste? Revisa la pestaña <b>📖 Glosario</b> — ahí explicamos en lenguaje simple todos los términos de MEL que usa MetaTrace. Y si quieres saber quién está detrás de esta herramienta o cómo se maneja tu privacidad, revisa <b>ℹ️ Acerca de</b>.</p>
@@ -1350,6 +1351,7 @@ const GLOSARIO_TERMINOS = [
   { t:'Área responsable', d:'El área o programa interno de tu organización a cargo de una actividad (ej. "Educación", "Salud", "Incidencia"), distinto del "Responsable", que es la persona específica encargada.' },
   { t:'Financiamiento / Origen del presupuesto', d:'De dónde viene el dinero que financia un proyecto: cooperación internacional, fondos propios, una alianza público-privada, etc. Útil para informes de rendición de cuentas.' },
   { t:'Respaldo (.json)', d:'Una copia completa de toda la información de MetaTrace que puedes descargar y guardar. Como los datos viven solo en este dispositivo, exportar el respaldo con frecuencia es la única forma de no perderlos si cambias de computador o reinstalas este dispositivo.' },
+  { t:'Aviso de nueva versión disponible', d:'Un mensaje que aparece al abrir MetaTrace instalada como app de escritorio, si existe una versión más nueva publicada. Solo consulta cuál es el número de versión más reciente — nunca envía tus datos — y no instala nada de forma automática: tú decides si ir a la página de descarga o seguir con la versión actual.' },
 ];
 
 function viewGlosario(){
@@ -1394,6 +1396,8 @@ function viewAcercaDe(){
       <p>Fue creado a la medida de organizaciones de la sociedad civil que buscan una alternativa simple a Excel para dar seguimiento a sus proyectos siguiendo la lógica de su propia Teoría de Cambio, sin depender de licencias, servidores propios ni conexión constante a internet.</p>
       <div class="about-privacy">
         🔒 <b>Aviso de privacidad:</b> MetaTrace no envía tu información a ningún servidor externo ni a COMETA. Todo lo que registras — tu Teoría de Cambio, proyectos, resultados, actividades, indicadores y responsables — se guarda únicamente en este dispositivo. Por eso es importante exportar tu respaldo (.json) con frecuencia: si reinstalas o cambias de equipo, la información no se puede recuperar desde ningún otro lugar, porque nunca salió de tu propio dispositivo.
+        <br><br>
+        Si usas la versión instalada como app de escritorio (.dmg / .exe), MetaTrace revisa al abrirse si hay una versión más nueva publicada en GitHub. Esa consulta solo pregunta por el número de versión más reciente — nunca envía nada de lo que registras — y nunca se instala nada sola; solo te avisa y te deja decidir. Esto no cambia en nada la garantía anterior: tus datos siguen sin salir jamás de este dispositivo.
         <br><br>
         Sitio web de COMETA: <a href="https://colectivometa.com" target="_blank" rel="noopener noreferrer">https://colectivometa.com</a><br>
         ¿Dudas? Escríbenos a <a href="mailto:hola@colectivometa.com">hola@colectivometa.com</a>
