@@ -4,6 +4,8 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: true,
+    // Sin extensión: Electron elige icon.icns en Mac e icon.ico en Windows solo.
+    icon: './icon',
   },
   rebuildConfig: {},
   makers: [
@@ -22,6 +24,19 @@ module.exports = {
     {
       name: '@electron-forge/maker-rpm',
       config: {},
+    },
+  ],
+  publishers: [
+    {
+      name: '@electron-forge/publisher-github',
+      config: {
+        repository: {
+          owner: 'SebasHMora',
+          name: 'MetaTrace',
+        },
+        prerelease: false,
+        draft: true,
+      },
     },
   ],
   plugins: [
