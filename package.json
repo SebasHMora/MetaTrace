@@ -1,7 +1,7 @@
 {
   "name": "MetaTrace",
-  "version": "0.2",
-  "description": "",
+  "version": "0.3",
+  "description": "Sistema de Monitoreo, Evaluación y Aprendizaje (MEL) para organizaciones de sociedad civil.",
   "main": "main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -52,7 +52,7 @@
     }
   },
   "keywords": [],
-  "author": "",
+  "author": "Colectivo META (COMETA)",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
