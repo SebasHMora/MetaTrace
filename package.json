@@ -1,6 +1,6 @@
 {
   "name": "MetaTrace",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Sistema de Monitoreo, Evaluación y Aprendizaje (MEL) para organizaciones de sociedad civil.",
   "main": "main.js",
   "scripts": {
