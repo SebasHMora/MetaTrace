@@ -547,6 +547,8 @@
   .about-credit b{ color: var(--color-primary); font-family: var(--font-display); }
   .about-version{ font-size:11px; color: var(--color-text-soft); margin-top:6px; }
   .about-disclaimer{ font-size:10.5px; color: var(--color-text-soft); margin-top:10px; line-height:1.5; max-width:480px; margin-left:auto; margin-right:auto; }
+  .about-licencias{ font-size:10px; color: var(--color-text-soft); margin-top:14px; line-height:1.5; max-width:520px; margin-left:auto; margin-right:auto; }
+  .about-licencias code{ font-size:9.5px; background: var(--color-surface-alt); padding:1px 4px; border-radius:3px; }
 
   /* ---------- Toast ---------- */
   #toast{
@@ -652,7 +654,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    ========================================================= */
 
 const STORAGE_KEY = 'cometa_data_v2';
-const APP_VERSION = '0.9.1'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
+const APP_VERSION = '0.9.2'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
 
 function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -1460,6 +1462,16 @@ function viewAcercaDe(){
         <b>Desarrollado por Colectivo META (COMETA). Todos los derechos reservados, 2026.</b>
         <div class="about-version">MetaTrace — Versión ${APP_VERSION}</div>
         <div class="about-disclaimer">Se prohíbe la reproducción parcial o total de este software, así como su alteración, distribución o venta sin la autorización expresa y por escrito de Colectivo META (COMETA).</div>
+        <div class="about-licencias">
+          MetaTrace se apoya en componentes de código abierto de terceros:
+          <b>Electron</b> y el motor <b>Chromium</b>/<b>Node.js</b> que incluye (licencia MIT y licencias BSD relacionadas),
+          <b>SheetJS</b> (para exportar a Excel/CSV) y <b>electron&#8209;squirrel&#8209;startup</b> (ambos bajo licencia Apache&nbsp;2.0).
+          El texto completo de esas licencias y sus avisos de copyright viene en el archivo
+          <code>THIRD-PARTY-LICENSES.txt</code> incluido con la aplicación
+          (y las de Chromium/Node/V8 en <code>electron.LICENSES.chromium.html</code>, junto a él).
+          El código propio de MetaTrace es &copy; Colectivo META (COMETA); esas licencias de terceros
+          cubren solo sus respectivos componentes.
+        </div>
       </div>
     </div>
   `;
