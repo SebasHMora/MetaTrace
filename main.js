@@ -22,10 +22,31 @@ function createWindow () {
     // icon.icns en la raíz del proyecto, esta línea recoge el correcto según el sistema.
     icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.icns'),
     webPreferences: {
-      nodeIntegration: true
+      // La interfaz (index.html) es 100% web: usa localStorage y el DOM, nunca
+      // Node. Por eso mantenemos Node fuera del render y aislamos el contexto:
+      // así, si algún día se colara un XSS (p. ej. al importar un respaldo
+      // manipulado), no podría tocar el sistema de archivos ni ejecutar comandos.
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
     }
   });
   win.loadFile('index.html');
+
+  // La ventana principal nunca debe salir de index.html.
+  win.webContents.on('will-navigate', (e, url) => {
+    if (url !== win.webContents.getURL()) e.preventDefault();
+  });
+
+  // Enlaces externos (sitio de COMETA, correo, página de descargas) -> se abren en
+  // el navegador / cliente de correo del sistema, nunca dentro de una ventana de
+  // Electron. La ventana del reporte imprimible usa window.open('') con contenido
+  // local generado por la app: esa sí se permite, y hereda esta misma configuración.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url === 'about:blank' || url === '') return { action: 'allow' };
+    if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
 }
 
 // --------------------------------------------------------------------------

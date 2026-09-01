@@ -21,9 +21,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
-      - name: Instalar dependencias
-        run: npm install
+      # npm ci instala EXACTAMENTE lo que dice package-lock.json (a diferencia de
+      # "npm install", que puede traer versiones nuevas). Así el build publicado es
+      # reproducible y una dependencia transitiva alterada no se cuela sola.
+      - name: Instalar dependencias (desde el lockfile)
+        run: npm ci
+
+      # Informa vulnerabilidades conocidas en las dependencias. No bloquea la
+      # publicación (continue-on-error), pero deja el reporte visible en el log.
+      - name: Auditoría de dependencias
+        run: npm audit --audit-level=high
+        continue-on-error: true
 
       - name: Compilar y publicar en GitHub Releases
         run: npm run publish
