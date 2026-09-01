@@ -642,7 +642,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    ========================================================= */
 
 const STORAGE_KEY = 'cometa_data_v2';
-const APP_VERSION = '0.8.0'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
+const APP_VERSION = '0.8.1'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
 
 function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -928,9 +928,11 @@ function thSort(label, key, sectionKey){
 }
 function searchBar(sectionKey, placeholder, totalCount, shownCount){
   const st = tableState[sectionKey];
+  const hayFiltrosColumna = Object.values(st.filtros||{}).some(v=>v);
+  const limpiarLabel = hayFiltrosColumna ? '✕ Limpiar filtros' : '✕ Limpiar búsqueda';
   return `<div class="search-bar">
     <input type="text" id="searchInput" placeholder="${esc(placeholder)}" value="${esc(st.search)}">
-    ${ hayFiltrosActivos(st) ? `<button type="button" class="btn btn-text btn-sm" data-action="limpiar-filtros" data-id="${sectionKey}">✕ Limpiar filtros</button>` : '' }
+    ${ hayFiltrosActivos(st) ? `<button type="button" class="btn btn-text btn-sm" data-action="limpiar-filtros" data-id="${sectionKey}">${limpiarLabel}</button>` : '' }
     <span class="search-count">${hayFiltrosActivos(st) ? `${shownCount} de ${totalCount}` : `${totalCount} registro(s)`}</span>
   </div>`;
 }
@@ -3679,7 +3681,15 @@ function rtfEscapeChar(ch){
   if(ch === '\\' || ch === '{' || ch === '}') return '\\' + ch;
   if(code < 128) return ch;
   if(CP1252[ch] !== undefined) return "\\'" + CP1252[ch].toString(16).padStart(2,'0');
-  return '\\u' + code + '?';
+  // \uN de RTF exige un entero de 16 bits con signo (-32768..32767). Emitimos cada unidad
+  // UTF-16 (así los caracteres fuera del BMP, como emojis, salen como par de \uN) y
+  // convertimos los valores >32767 a su equivalente negativo.
+  let out = '';
+  for(let i = 0; i < ch.length; i++){
+    const n = ch.charCodeAt(i);
+    out += '\\u' + (n > 32767 ? n - 65536 : n) + '?';
+  }
+  return out;
 }
 function rtfText(str){ return Array.from(String(str ?? '')).map(rtfEscapeChar).join(''); }
 function rtfRunProps(style){
@@ -3762,13 +3772,23 @@ function rtfDoc(bodyContent){
 const RTF_C = { TEAL:1, GOLD:2, GRAYTXT:3, GRAYMUTED:4, GRAYLINE:5, DARK:6, WHITE:7, BGCARD:8, BORDERCARD:9, HEADBG:10, FOOTNOTE:11, PURPLE:12 };
 const RTF_CONTENT_W = 9360;
 
+// Quita separadores de ruta y caracteres inválidos en nombres de archivo (Windows y macOS),
+// para que un nombre de área/proyecto/persona como "Salud / Nutrición" no rompa la descarga.
+function nombreArchivoSeguro(nombre){
+  return String(nombre || 'Formato')
+    .replace(/[\/\\:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s.-]+|[\s.-]+$/g, '')
+    .slice(0, 120) || 'Formato';
+}
+
 function descargarRTF(contenidoRTF, nombreArchivo){
   if(!contenidoRTF){ showToast('No se pudo generar el formato'); return; }
   const blob = new Blob([contenidoRTF], {type:'application/rtf'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = nombreArchivo.endsWith('.doc') ? nombreArchivo : nombreArchivo + '.doc';
+  a.download = nombreArchivoSeguro(nombreArchivo) + '.doc';
   document.body.appendChild(a);
   a.click();
   a.remove();
