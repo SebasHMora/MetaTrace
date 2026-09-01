@@ -201,22 +201,12 @@
 
   /* ---------- Charts ---------- */
   .charts-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(230px,1fr)); gap:16px; margin-bottom: 12px; }
-  .dash-two-col{ display:grid; grid-template-columns: 1fr 1fr; gap:24px; align-items:start; }
-  .dash-two-col .section-block{ margin-bottom:0; }
-  @media (max-width: 900px){
-    .dash-two-col{ grid-template-columns: 1fr; }
-  }
   .chart-card{
     background: var(--color-surface); border-radius: var(--radius-m); padding:16px 18px;
     box-shadow: var(--shadow-card); display:flex; flex-direction:column; align-items:center; text-align:center;
   }
   .chart-card h3{ font-size:13.5px; align-self:flex-start; margin-bottom:10px; text-align:left; }
   .chart-card.bar-card{ align-items:stretch; text-align:left; }
-  .chart-card-full{
-    background: var(--color-surface); border-radius: var(--radius-m); padding:18px 20px;
-    box-shadow: var(--shadow-card);
-  }
-  .chart-card-full h3{ font-size:13.5px; margin-bottom:14px; }
   .tendencia-caption{ font-size:11px; color: var(--color-text-soft); margin-top:8px; }
   .chart-empty{ font-size:12.5px; color: var(--color-text-soft); font-style:italic; }
   .donut-legend{ display:flex; flex-direction:column; gap:6px; margin-top:12px; width:100%; }
@@ -324,6 +314,8 @@
   .field{ margin-bottom:14px; }
   .field label{ display:block; font-size:12.5px; font-weight:700; color: var(--color-primary); margin-bottom:5px; font-family: var(--font-display); }
   .field-hint{ font-size:11px; color: var(--color-text-soft); margin-top:4px; }
+  .checkbox-label{ display:flex; align-items:center; gap:8px; font-size:13px; color: var(--color-text); cursor:pointer; }
+  .checkbox-label input[type="checkbox"]{ width:16px; height:16px; flex-shrink:0; cursor:pointer; }
   .field input, .field select, .field textarea{
     width:100%; padding: 10px 12px; border-radius: var(--radius-s); border:1px solid var(--color-border);
     font-size: 13.5px; color: var(--color-text); background: var(--color-surface-alt);
@@ -412,6 +404,11 @@
   }
   .perfil-card-top{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
   .perfil-card-top h2{ font-size:14.5px; }
+  .osc-nombre{
+    font-family: var(--font-display); font-size:28px; font-weight:800; color: var(--color-primary);
+    line-height:1.2; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--color-border);
+  }
+  .osc-nombre.is-empty{ font-size:13.5px; font-weight:400; font-style:italic; color: var(--color-text-soft); border-bottom:none; padding-bottom:0; margin-bottom:10px; }
   .perfil-field{ font-size:12.5px; line-height:1.6; color: var(--color-text); margin-top:6px; }
   .perfil-field b{ color: var(--color-primary); font-family: var(--font-display); }
   .perfil-empty{ color: var(--color-text-soft); font-style:italic; }
@@ -645,7 +642,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    ========================================================= */
 
 const STORAGE_KEY = 'cometa_data_v2';
-const APP_VERSION = '0.4.1'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
+const APP_VERSION = '0.8.0'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
 
 function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -670,7 +667,7 @@ function safeLSSet(key, value){
 
 /* ---------------- Store ---------------- */
 const Store = {
-  data: { perfil:{vision:'',mision:''}, objetivosGenerales: [], objetivosEspecificos: [], proyectos: [], actividades: [], responsables: [] },
+  data: { perfil:{nombreOrganizacion:'',vision:'',mision:''}, objetivosGenerales: [], objetivosEspecificos: [], proyectos: [], actividades: [], responsables: [] },
   load(){
     try{
       const raw = safeLSGet(STORAGE_KEY);
@@ -679,7 +676,7 @@ const Store = {
     ['objetivosGenerales','objetivosEspecificos','proyectos','actividades','responsables'].forEach(k=>{
       if(!Array.isArray(this.data[k])) this.data[k] = [];
     });
-    if(!this.data.perfil || typeof this.data.perfil !== 'object') this.data.perfil = { vision:'', mision:'' };
+    if(!this.data.perfil || typeof this.data.perfil !== 'object') this.data.perfil = { nombreOrganizacion:'', vision:'', mision:'' };
   },
   save(){
     const ok = safeLSSet(STORAGE_KEY, JSON.stringify(this.data));
@@ -705,7 +702,7 @@ const Store = {
 };
 Store.load();
 
-/* ---------------- Semáforo de ejecución (actividades / proyectos) ---------------- */
+/* ---------------- Semáforo de actividades (actividades / proyectos) ---------------- */
 // Devuelve {code, label} donde code es verde|amarillo|rojo|gris
 function calcularSemaforo(act){
   if(act.estadoManual) return SEMAFORO_DEFS[act.estadoManual];
@@ -730,14 +727,14 @@ function chip(sem){
 // otro sin un encabezado de columna que los distinga, así que aquí sí necesitan una etiqueta explícita.
 const TOC_CHIP_LABELS = {
   ejecucion:    { verde:'Actividades ejecutadas', amarillo:'Actividades en proceso', rojo:'Actividades retrasadas', gris:'Actividades no iniciadas' },
-  indicadores:  { verde:'Meta alcanzada', amarillo:'Meta en progreso', gris:'Sin datos de indicadores' }
+  indicadores:  { verde:'Objetivo alcanzado', amarillo:'Objetivo en proceso', gris:'Sin datos de indicadores' }
 };
 function chipTOC(sem, tipo){
   const label = (TOC_CHIP_LABELS[tipo] && TOC_CHIP_LABELS[tipo][sem.code]) || sem.label;
   return `<span class="chip ${sem.code}"><span class="dot"></span>${label}</span>`;
 }
 
-// Semáforo de ejecución agregado a nivel de proyecto, según el semáforo de sus actividades
+// Semáforo de actividades agregado a nivel de proyecto, según el semáforo de sus actividades
 function calcularSemaforoProyecto(proyectoId){
   const acts = Store.data.actividades.filter(a=>a.proyectoId===proyectoId);
   if(!acts.length) return SEMAFORO_DEFS.gris;
@@ -748,7 +745,7 @@ function calcularSemaforoProyecto(proyectoId){
   if(sems.every(s=>s==='verde')) return SEMAFORO_DEFS.verde;
   return SEMAFORO_DEFS.amarillo; // mezcla de ejecutadas y no iniciadas: sigue en proceso
 }
-// Semáforo de ejecución agregado a nivel de Objetivo específico, según sus proyectos
+// Semáforo de actividades agregado a nivel de Objetivo específico, según sus proyectos
 function calcularSemaforoProyectosObjetivoEspecifico(objEspId){
   const proys = Store.data.proyectos.filter(p=>p.objetivoEspecificoId===objEspId);
   if(!proys.length) return SEMAFORO_DEFS.gris;
@@ -759,7 +756,7 @@ function calcularSemaforoProyectosObjetivoEspecifico(objEspId){
   if(sems.every(s=>s==='verde')) return SEMAFORO_DEFS.verde;
   return SEMAFORO_DEFS.amarillo;
 }
-// Semáforo de ejecución agregado a nivel de Objetivo general, según sus objetivos específicos
+// Semáforo de actividades agregado a nivel de Objetivo general, según sus objetivos específicos
 function calcularSemaforoProyectosObjetivoGeneral(objGenId){
   const especificosIds = Store.data.objetivosEspecificos.filter(e=>e.objetivoGeneralId===objGenId).map(e=>e.id);
   const proys = Store.data.proyectos.filter(p=>especificosIds.includes(p.objetivoEspecificoId));
@@ -838,17 +835,17 @@ function likertPorValor(v){ return LIKERT_LEVELS.find(l=>l.value===v) || null; }
 
 const SEMAFORO_INDICADOR_DEFS = {
   verde:    { code:'verde',    label:'Meta alcanzada' },
-  amarillo: { code:'amarillo', label:'En progreso' },
+  amarillo: { code:'amarillo', label:'En proceso' },
   gris:     { code:'gris',     label:'Sin datos' }
 };
-// Semáforo de indicadores de UN resultado (promedio de avance de sus indicadores)
+// Semáforo de proyecto de UN resultado (promedio de avance de sus indicadores)
 function calcularSemaforoIndicadoresResultado(res){
   const avances = (res.indicadores||[]).map(calcularAvanceIndicador).filter(v=>v!==null);
   if(!avances.length) return SEMAFORO_INDICADOR_DEFS.gris;
   const avg = avances.reduce((s,v)=>s+v,0) / avances.length;
   return avg >= 100 ? SEMAFORO_INDICADOR_DEFS.verde : SEMAFORO_INDICADOR_DEFS.amarillo;
 }
-// Semáforo de indicadores agregado a nivel de PROYECTO, según el avance de indicadores de todos sus resultados.
+// Semáforo de proyecto agregado a nivel de PROYECTO, según el avance de indicadores de todos sus resultados.
 function calcularSemaforoIndicadoresProyecto(proyectoId){
   const p = Store.get('proyectos', proyectoId);
   const resultados = p && Array.isArray(p.resultados) ? p.resultados : [];
@@ -856,14 +853,14 @@ function calcularSemaforoIndicadoresProyecto(proyectoId){
   if(!sems.length) return SEMAFORO_INDICADOR_DEFS.gris;
   return sems.every(s=>s==='verde') ? SEMAFORO_INDICADOR_DEFS.verde : SEMAFORO_INDICADOR_DEFS.amarillo;
 }
-// Semáforo de indicadores agregado a nivel de Objetivo específico, según sus proyectos
+// Semáforo de proyecto agregado a nivel de Objetivo específico, según sus proyectos
 function calcularSemaforoIndicadoresObjetivoEspecifico(objEspId){
   const proys = Store.data.proyectos.filter(p=>p.objetivoEspecificoId===objEspId);
   const sems = proys.map(p=>calcularSemaforoIndicadoresProyecto(p.id).code).filter(s=>s!=='gris');
   if(!sems.length) return SEMAFORO_INDICADOR_DEFS.gris;
   return sems.every(s=>s==='verde') ? SEMAFORO_INDICADOR_DEFS.verde : SEMAFORO_INDICADOR_DEFS.amarillo;
 }
-// Semáforo de indicadores agregado a nivel de Objetivo general, según sus objetivos específicos
+// Semáforo de proyecto agregado a nivel de Objetivo general, según sus objetivos específicos
 function calcularSemaforoIndicadoresObjetivoGeneral(objGenId){
   const especificos = Store.data.objetivosEspecificos.filter(e=>e.objetivoGeneralId===objGenId);
   const sems = especificos.map(e=>calcularSemaforoIndicadoresObjetivoEspecifico(e.id).code).filter(s=>s!=='gris');
@@ -902,7 +899,6 @@ function hayFiltrosActivos(st){
 function renderFiltrosBar(sectionKey, filtrosConfig){
   const st = tableState[sectionKey];
   const filtros = st.filtros || {};
-  const activos = Object.values(filtros).some(v=>v);
   return `
     <div class="filtros-bar">
       ${filtrosConfig.map(f=>`
@@ -913,7 +909,6 @@ function renderFiltrosBar(sectionKey, filtrosConfig){
             ${f.opciones.map(o=>`<option value="${esc(o.value)}" ${filtros[f.key]===o.value?'selected':''}>${esc(o.label)}</option>`).join('')}
           </select>
         </div>`).join('')}
-      ${ activos ? `<button type="button" class="btn btn-text btn-sm filtros-limpiar" data-action="limpiar-filtros" data-id="${sectionKey}">✕ Limpiar filtros</button>` : '' }
     </div>`;
 }
 function ordenarFilas(rows, getters, sortKey, sortDir){
@@ -935,6 +930,7 @@ function searchBar(sectionKey, placeholder, totalCount, shownCount){
   const st = tableState[sectionKey];
   return `<div class="search-bar">
     <input type="text" id="searchInput" placeholder="${esc(placeholder)}" value="${esc(st.search)}">
+    ${ hayFiltrosActivos(st) ? `<button type="button" class="btn btn-text btn-sm" data-action="limpiar-filtros" data-id="${sectionKey}">✕ Limpiar filtros</button>` : '' }
     <span class="search-count">${hayFiltrosActivos(st) ? `${shownCount} de ${totalCount}` : `${totalCount} registro(s)`}</span>
   </div>`;
 }
@@ -1087,12 +1083,12 @@ function construirTendenciaAvanceMensual(){
 
 function chartCardTendencia(puntos){
   if(!puntos.length){
-    return `<div class="chart-card-full">
+    return `<div class="chart-card bar-card">
       <h3>Avance de actividades registrado en el tiempo</h3>
       <p class="chart-empty">Aún no hay suficientes registros históricos para mostrar una tendencia. Usa "📈 Registrar avance" en tus actividades para irla construyendo con el tiempo.</p>
     </div>`;
   }
-  return `<div class="chart-card-full">
+  return `<div class="chart-card bar-card">
     <h3>Avance de actividades registrado en el tiempo</h3>
     ${lineChartSVG(puntos)}
     <p class="tendencia-caption">Promedio del % de avance registrado cada mes, a partir de los registros hechos con "Registrar avance".</p>
@@ -1147,6 +1143,7 @@ const SECTIONS = [
   { id:'proyectos',    label:'Proyectos',        ico:'🗂️' },
   { id:'actividades',  label:'Actividades',      ico:'✅' },
   { id:'responsables', label:'Responsables',     ico:'👥' },
+  { id:'formatos',     label:'Formatos',         ico:'📝' },
   { id:'guia',         label:'Guía de uso',      ico:'📘' },
   { id:'glosario',     label:'Glosario',         ico:'📖' },
   { id:'acerca',       label:'Acerca de',        ico:'ℹ️' },
@@ -1171,6 +1168,7 @@ function renderView(){
   else if(currentSection === 'proyectos') view.innerHTML = viewProyectos();
   else if(currentSection === 'actividades') view.innerHTML = viewActividades();
   else if(currentSection === 'responsables') view.innerHTML = viewResponsables();
+  else if(currentSection === 'formatos') view.innerHTML = viewFormatos();
   else if(currentSection === 'guia') view.innerHTML = viewGuia();
   else if(currentSection === 'glosario') view.innerHTML = viewGlosario();
   else if(currentSection === 'acerca') view.innerHTML = viewAcercaDe();
@@ -1219,7 +1217,7 @@ function viewGuia(){
       <ol class="guide-steps">
         <li class="guide-step">
           <span class="guide-step-num">1</span>
-          <div class="guide-step-body"><strong>Define tu Teoría de Cambio en "Mi TOC"</strong><span>Registra tu Visión y Misión (opcionales), y al menos un Objetivo general con su(s) Objetivo(s) específico(s). Este es el punto de partida de toda la app. MetaTrace les asigna solo el código (OG1, OE1.1...) según el orden en que los vayas creando — no necesitas escribirlo tú.</span></div>
+          <div class="guide-step-body"><strong>Define tu Teoría de Cambio en "Mi TOC"</strong><span>Pon el nombre de tu organización, y registra tu Visión y Misión (todo opcional), y al menos un Objetivo general con su(s) Objetivo(s) específico(s). Este es el punto de partida de toda la app. MetaTrace les asigna solo el código (OG1, OE1.1...) según el orden en que los vayas creando — no necesitas escribirlo tú.</span></div>
         </li>
         <li class="guide-step">
           <span class="guide-step-num">2</span>
@@ -1235,7 +1233,7 @@ function viewGuia(){
         </li>
         <li class="guide-step">
           <span class="guide-step-num">5</span>
-          <div class="guide-step-body"><strong>Revisa el Panel general</strong><span>Ahí verás el resumen de todo: avance por objetivo general, cómo van tus semáforos, y si hay actividades sueltas que aún no vinculaste a ningún resultado.</span></div>
+          <div class="guide-step-body"><strong>Revisa el Panel general</strong><span>Ahí verás el resumen de todo: cómo van tus proyectos y actividades, y si hay actividades sueltas que aún no vinculaste a ningún resultado.</span></div>
         </li>
       </ol>
     </div>
@@ -1243,26 +1241,27 @@ function viewGuia(){
     <div class="guide-section" id="g-pestanas">
       <h2>🗂️ 3. Qué hay en cada pestaña</h2>
       <ul class="guide-list">
-        <li><b>📊 Panel general</b> — el resumen visual: actividades retrasadas o próximas a vencer, gráficas de semáforo, tendencia de avance en el tiempo, avance por objetivo general y por proyecto, y la carga de trabajo de tu equipo.</li>
-        <li><b>🧭 Mi TOC</b> — la Teoría de Cambio de tu organización: visión, misión, objetivos generales y sus objetivos específicos. Es el punto de partida del que se desprende todo lo demás.</li>
+        <li><b>📊 Panel general</b> — el resumen visual: actividades retrasadas o próximas a vencer, gráficas de avance (proyectos, actividades, y su tendencia en el tiempo), y la carga de trabajo de tu equipo.</li>
+        <li><b>🧭 Mi TOC</b> — la Teoría de Cambio de tu organización: nombre de la organización, visión, misión, objetivos generales y sus objetivos específicos. Es el punto de partida del que se desprende todo lo demás.</li>
         <li><b>🗂️ Proyectos</b> — la lista de tus proyectos, con su objetivo específico, responsable, financiamiento, fechas, sus resultados y ambos semáforos (de ejecución y de indicadores).</li>
         <li><b>✅ Actividades</b> — el detalle operativo del día a día, con fechas, responsable, % de avance, estado y semáforo.</li>
         <li><b>👥 Responsables</b> — tu equipo: nombre, rol, área, organización y contacto.</li>
+        <li><b>📝 Formatos</b> — descarga formatos en Word para que las áreas o responsables reporten sus avances en papel: por proyecto completo, por área, o por responsable. Los datos que ya se conocen vienen impresos; tú solo transcribes lo que te devuelvan.</li>
         <li><b>📘 Guía de uso</b> — esta misma página.</li>
         <li><b>📖 Glosario</b> — si te encuentras con un término que no conoces (TOC, línea base, etc.), lo explicamos ahí en palabras simples.</li>
         <li><b>ℹ️ Acerca de</b> — quién desarrolló MetaTrace y cómo se maneja tu información (aviso de privacidad).</li>
       </ul>
-      <div class="guide-tip">💡 En el Panel general casi todo es clicable: una actividad retrasada o próxima a vencer, una tarjeta de proyecto, o una fila de carga de trabajo te llevan directo a esa información, sin tener que buscarla manualmente.</div>
+      <div class="guide-tip">💡 En el Panel general casi todo es clicable: una actividad retrasada o próxima a vencer, o una fila de carga de trabajo te llevan directo a esa información, sin tener que buscarla manualmente.</div>
     </div>
 
     <div class="guide-section" id="g-semaforos">
       <h2>🚦 4. Los dos semáforos</h2>
       <p>MetaTrace usa dos semáforos con propósitos distintos — no los confundas:</p>
       <ul class="guide-list">
-        <li><b>Semáforo de ejecución</b> (actividades, proyectos, objetivos específicos y generales): verde = ejecutado, amarillo = en proceso, rojo = retrasado, gris = no iniciado. Se calcula solo, según el % de avance y las fechas que pusiste.</li>
-        <li><b>Semáforo de indicadores</b> (resultados, proyectos, objetivos específicos y generales): verde = meta alcanzada, amarillo = en progreso, gris = sin datos aún. Se calcula según el avance de los indicadores, no de las actividades.</li>
+        <li><b>Semáforo de actividades</b> (actividades, proyectos, objetivos específicos y generales): verde = ejecutado, amarillo = en proceso, rojo = retrasado, gris = no iniciado. Se calcula solo, según el % de avance y las fechas que pusiste.</li>
+        <li><b>Semáforo de proyecto</b> (resultados, proyectos, objetivos específicos y generales): verde = meta alcanzada, amarillo = en proceso, gris = sin datos aún. Se calcula según el avance de los indicadores, no de las actividades.</li>
       </ul>
-      <p>En la pestaña Proyectos puedes ver ambos semáforos lado a lado para cada proyecto — así distingues rápido entre "vamos ejecutando bien" y "el cambio ya se está viendo". Ese mismo par de semáforos se agrega también hacia arriba: por objetivo específico y por objetivo general, visible en el Panel general y en "Mi TOC" (ahí con nombres más específicos, como "Actividades en proceso" o "Meta en progreso", ya que ambos semáforos aparecen uno junto al otro). Al final del Panel general hay una leyenda completa que explica los dos.</p>
+      <p>En la pestaña Proyectos puedes ver ambos semáforos lado a lado para cada proyecto — así distingues rápido entre "vamos ejecutando bien" y "el cambio ya se está viendo". Ese mismo par de semáforos se agrega también hacia arriba: por objetivo específico y por objetivo general, visible en "Mi TOC" (ahí con nombres más específicos, como "Actividades en proceso" u "Objetivo en proceso", ya que ambos semáforos aparecen uno junto al otro). El Panel general, por su parte, resume el semáforo de proyecto de todos tus proyectos en conjunto, en la gráfica "Avance de los proyectos".</p>
     </div>
 
     <div class="guide-section" id="g-indicadores">
@@ -1285,7 +1284,7 @@ function viewGuia(){
     <div class="guide-section" id="g-buscar">
       <h2>🔍 7. Buscar, filtrar y ordenar</h2>
       <p>Todas las tablas (Proyectos, Actividades, Responsables) tienen un buscador arriba — escribe cualquier palabra y filtra en tiempo real, sin distinguir mayúsculas ni tildes.</p>
-      <p>En Proyectos y Actividades, además del buscador hay una fila de <b>desplegables para filtrar por columna</b> (objetivo, financiamiento, semáforo, responsable, estado, etc.) — cada uno lista los valores que ya tienes cargados. Puedes combinar varios filtros a la vez con el buscador, muy útil cuando la lista ya es larga. El botón "✕ Limpiar filtros" aparece en cuanto hay alguno activo.</p>
+      <p>En Proyectos y Actividades, además del buscador hay una fila de <b>desplegables para filtrar por columna</b> (objetivo, financiamiento, semáforo, responsable, estado, etc.) — cada uno lista los valores que ya tienes cargados. Puedes combinar varios filtros a la vez con el buscador, muy útil cuando la lista ya es larga. El botón "✕ Limpiar filtros", junto al buscador, aparece en cuanto hay una búsqueda escrita o algún filtro activo, y limpia los dos de un solo clic.</p>
       <p>Además, puedes hacer clic en el <b>encabezado de cualquier columna</b> para ordenar por ese dato — un clic ordena de menor a mayor, otro clic invierte el orden. Muy útil, por ejemplo, para ordenar Actividades por fecha o por % de avance.</p>
     </div>
 
@@ -1345,8 +1344,8 @@ const GLOSARIO_TERMINOS = [
   { t:'Ajustes a la actividad original', d:'Un espacio para anotar qué cambió respecto a lo planeado inicialmente (ej. "se redujo de 5 a 3 estados por motivos de seguridad").' },
   { t:'Notas', d:'Texto libre para observaciones generales de una actividad — riesgos, evidencias, contexto. Se solapa un poco con "Comentarios al seguimiento"; puedes usar el que te resulte más natural.' },
   { t:'Comentarios al seguimiento', d:'Texto libre para observaciones registradas durante el monitoreo de una actividad. Se solapa un poco con "Notas"; puedes usar el que te resulte más natural.' },
-  { t:'Semáforo de ejecución', d:'Un color que resume qué tan al día va una actividad, proyecto u objetivo según su avance y sus fechas: verde (ejecutado), amarillo (en proceso), rojo (retrasado) o gris (no iniciado). Mide el trabajo, no el resultado.' },
-  { t:'Semáforo de indicadores', d:'Un color que resume si los indicadores de los resultados de un proyecto (o de un objetivo) ya alcanzaron su meta: verde (meta alcanzada), amarillo (en progreso) o gris (sin datos aún). A diferencia del semáforo de ejecución, mide si el cambio realmente está ocurriendo, no si se hizo el trabajo.' },
+  { t:'Semáforo de actividades', d:'Un color que resume qué tan al día va una actividad, proyecto u objetivo según su avance y sus fechas: verde (ejecutado), amarillo (en proceso), rojo (retrasado) o gris (no iniciado). Mide el trabajo, no el resultado.' },
+  { t:'Semáforo de proyecto', d:'Un color que resume si los indicadores de los resultados de un proyecto (o de un objetivo) ya alcanzaron su meta: verde (meta alcanzada), amarillo (en proceso) o gris (sin datos aún). A diferencia del semáforo de actividades, mide si el cambio realmente está ocurriendo, no si se hizo el trabajo.' },
   { t:'Histórico de avance', d:'El registro fechado de cada actualización de avance que se ha hecho, tanto de actividades como de indicadores. Permite ver la evolución en el tiempo (ej. "en mayo íbamos al 30%, en junio al 40%") en vez de solo el dato más reciente.' },
   { t:'Área responsable', d:'El área o programa interno de tu organización a cargo de una actividad (ej. "Educación", "Salud", "Incidencia"), distinto del "Responsable", que es la persona específica encargada.' },
   { t:'Financiamiento / Origen del presupuesto', d:'De dónde viene el dinero que financia un proyecto: cooperación internacional, fondos propios, una alianza público-privada, etc. Útil para informes de rendición de cuentas.' },
@@ -1357,7 +1356,8 @@ const GLOSARIO_TERMINOS = [
 function viewGlosario(){
   const st = tableState.glosario;
   const q = normalizeSearch(st.search);
-  const rows = q ? GLOSARIO_TERMINOS.filter(g => normalizeSearch(g.t+' '+g.d).includes(q)) : GLOSARIO_TERMINOS;
+  const rows = (q ? GLOSARIO_TERMINOS.filter(g => normalizeSearch(g.t+' '+g.d).includes(q)) : GLOSARIO_TERMINOS)
+    .slice().sort((a,b)=>a.t.localeCompare(b.t, 'es'));
   return `
     <div class="page-head">
       <div>
@@ -1365,10 +1365,7 @@ function viewGlosario(){
         <p>Términos de Monitoreo, Evaluación y Aprendizaje explicados en lenguaje simple, pensados para organizaciones sociales.</p>
       </div>
     </div>
-    <div class="search-bar">
-      <input type="text" id="searchInput" placeholder="Buscar un término..." value="${esc(st.search)}">
-      <span class="search-count">${st.search ? `${rows.length} de ${GLOSARIO_TERMINOS.length}` : `${GLOSARIO_TERMINOS.length} término(s)`}</span>
-    </div>
+    ${searchBar('glosario', 'Buscar un término...', GLOSARIO_TERMINOS.length, rows.length)}
     <div class="glosario-grid">
       ${ rows.length ? rows.map(g=>`
         <div class="glosario-card">
@@ -1460,11 +1457,8 @@ function viewDashboard(){
   const countsActividades = { verde:0, amarillo:0, rojo:0, gris:0 };
   acts.forEach(a=>{ countsActividades[calcularSemaforo(a).code]++; });
 
-  const countsProyectos = { verde:0, amarillo:0, rojo:0, gris:0 };
-  proyectos.forEach(p=>{ countsProyectos[calcularSemaforoProyecto(p.id).code]++; });
-
-  const countsIndicadores = { verde:0, amarillo:0, gris:0 };
-  proyectos.forEach(p=>{ countsIndicadores[calcularSemaforoIndicadoresProyecto(p.id).code]++; });
+  const countsProyectos = { verde:0, amarillo:0, gris:0 };
+  proyectos.forEach(p=>{ countsProyectos[calcularSemaforoIndicadoresProyecto(p.id).code]++; });
 
   const actsSinResultado = acts.filter(a=>!a.resultadoId).length;
 
@@ -1474,42 +1468,6 @@ function viewDashboard(){
     .sort((a,b)=>(a.fechaFin||'').localeCompare(b.fechaFin||''));
   const actsProximasAVencer = acts.filter(a => a.fechaFin && a.fechaFin >= hoy && a.fechaFin <= limiteProximo && (Number(a.avance)||0) < 100)
     .sort((a,b)=>(a.fechaFin||'').localeCompare(b.fechaFin||''));
-
-  const generalCards = generales.length ? generales.map(g=>{
-    const avg = calcularAvancePromedioObjetivoGeneral(g.id);
-    const sem = calcularSemaforoProyectosObjetivoGeneral(g.id);
-    const nEsp = Store.data.objetivosEspecificos.filter(e=>e.objetivoGeneralId===g.id).length;
-    return `
-      <div class="proyecto-card">
-        <div class="proyecto-card-top">
-          <div>
-            <h3>${esc(g.nombre)}</h3>
-            <div class="proyecto-meta">${nEsp} objetivo(s) específico(s)</div>
-          </div>
-          ${chip(sem)}
-        </div>
-        <div class="progress-track"><div class="progress-fill" style="width:${avg}%;"></div></div>
-        <div class="progress-label"><span>Avance promedio agregado</span><span>${avg}%</span></div>
-      </div>`;
-  }).join('') : emptyState('Aún no hay objetivos generales', 'Ve a la pestaña "Mi TOC" para definir la Teoría de Cambio de tu organización.');
-
-  const proyectoCards = proyectos.length ? proyectos.map(p=>{
-    const actsP = acts.filter(a=>a.proyectoId===p.id);
-    const avg = calcularAvancePromedio(p.id);
-    const sem = calcularSemaforoProyecto(p.id);
-    return `
-      <div class="proyecto-card is-clickable" data-action="edit-proyecto" data-id="${p.id}" title="Ver / editar este proyecto">
-        <div class="proyecto-card-top">
-          <div>
-            <h3>${esc(p.nombre)}</h3>
-            <div class="proyecto-meta">${esc(nombreResponsableProyecto(p)||'Sin responsable asignado')}${p.donante?` · Financiamiento: ${esc(p.donante)}`:''} · ${fmtDate(p.fechaInicio)} – ${fmtDate(p.fechaFin)} · ${actsP.length} actividad(es)</div>
-          </div>
-          ${chip(sem)}
-        </div>
-        <div class="progress-track"><div class="progress-fill" style="width:${avg}%;"></div></div>
-        <div class="progress-label"><span>Avance promedio</span><span>${avg}%</span></div>
-      </div>`;
-  }).join('') : emptyState('Aún no hay proyectos', 'Crea tu primer proyecto en la sección "Proyectos" para comenzar a monitorear.');
 
   return `
     <div class="page-head">
@@ -1552,64 +1510,15 @@ function viewDashboard(){
     <div class="section-block">
       <h2>Gráficas</h2>
       <div class="charts-grid">
-        ${chartCardDonut('Semáforo por proyecto (ejecución)', countsProyectos, { verde:'Ejecutados', amarillo:'En proceso', rojo:'Retrasados', gris:'No iniciados' })}
-        ${chartCardDonut('Semáforo por proyecto (indicadores)', countsIndicadores, { verde:'Meta alcanzada', amarillo:'En progreso', gris:'Sin datos' }, ['verde','amarillo','gris'])}
-        ${chartCardDonut('Semáforo por actividad', countsActividades, { verde:'Ejecutadas', amarillo:'En proceso', rojo:'Retrasadas', gris:'No iniciadas' })}
-      </div>
-    </div>
-
-    <div class="section-block">
-      ${chartCardTendencia(construirTendenciaAvanceMensual())}
-    </div>
-
-    <div class="dash-two-col">
-      <div class="section-block">
-        <h2>Avance por objetivo general</h2>
-        ${generalCards}
-      </div>
-
-      <div class="section-block">
-        <h2>Avance por proyecto</h2>
-        ${proyectoCards}
+        ${chartCardDonut('Avance de los proyectos', countsProyectos, { verde:'Meta alcanzada', amarillo:'En proceso', gris:'Sin datos' }, ['verde','amarillo','gris'])}
+        ${chartCardDonut('Avance de actividades', countsActividades, { verde:'Ejecutadas', amarillo:'En proceso', rojo:'Retrasadas', gris:'No iniciadas' })}
+        ${chartCardTendencia(construirTendenciaAvanceMensual())}
       </div>
     </div>
 
     <div class="section-block">
       <h2>Carga de trabajo por responsable</h2>
       ${renderCargaResponsablesHtml(calcularCargaResponsables())}
-    </div>
-
-    <div class="section-block">
-      <h2>Cómo leer los semáforos</h2>
-      <div class="dash-two-col">
-        <div>
-          <div class="legend-group-title">Semáforo de ejecución</div>
-          <div class="legend">
-            ${chip(SEMAFORO_DEFS.verde)} <span style="font-size:12px;color:var(--color-text-soft);align-self:center;">100% ejecutado dentro del plazo.</span>
-          </div>
-          <div class="legend">
-            ${chip(SEMAFORO_DEFS.amarillo)} <span style="font-size:12px;color:var(--color-text-soft);align-self:center;">En ejecución, dentro del plazo.</span>
-          </div>
-          <div class="legend">
-            ${chip(SEMAFORO_DEFS.rojo)} <span style="font-size:12px;color:var(--color-text-soft);align-self:center;">Plazo vencido sin completarse.</span>
-          </div>
-          <div class="legend">
-            ${chip(SEMAFORO_DEFS.gris)} <span style="font-size:12px;color:var(--color-text-soft);align-self:center;">Aún no inicia según fecha programada.</span>
-          </div>
-        </div>
-        <div>
-          <div class="legend-group-title">Semáforo de indicadores</div>
-          <div class="legend">
-            ${chip(SEMAFORO_INDICADOR_DEFS.verde)} <span style="font-size:12px;color:var(--color-text-soft);align-self:center;">El indicador alcanzó su meta.</span>
-          </div>
-          <div class="legend">
-            ${chip(SEMAFORO_INDICADOR_DEFS.amarillo)} <span style="font-size:12px;color:var(--color-text-soft);align-self:center;">Tiene datos registrados, pero aún no alcanza la meta.</span>
-          </div>
-          <div class="legend">
-            ${chip(SEMAFORO_INDICADOR_DEFS.gris)} <span style="font-size:12px;color:var(--color-text-soft);align-self:center;">Aún no se ha registrado ningún dato de avance.</span>
-          </div>
-        </div>
-      </div>
     </div>
   `;
 }
@@ -1628,9 +1537,12 @@ function viewTOC(){
   const perfilHtml = `
     <div class="perfil-card">
       <div class="perfil-card-top">
-        <h2>Visión y Misión</h2>
+        <h2>Perfil de la organización</h2>
         <button class="btn btn-outline btn-sm" data-action="editar-perfil">✎ Editar</button>
       </div>
+      ${ per.nombreOrganizacion
+          ? `<div class="osc-nombre">${esc(per.nombreOrganizacion)}</div>`
+          : `<div class="osc-nombre is-empty">Aún no has puesto el nombre de tu organización.</div>` }
       <div class="perfil-field"><b>Visión:</b> ${per.vision ? esc(per.vision) : '<span class="perfil-empty">Aún no la has definido.</span>'}</div>
       <div class="perfil-field"><b>Misión:</b> ${per.mision ? esc(per.mision) : '<span class="perfil-empty">Aún no la has definido.</span>'}</div>
     </div>`;
@@ -1706,9 +1618,13 @@ function viewTOC(){
 function formPerfil(){
   const per = Store.data.perfil || { vision:'', mision:'' };
   return `
-    <h2>Visión y Misión</h2>
-    <p class="modal-sub">Un solo texto para toda la organización — sirve de encabezado a tu Teoría de Cambio.</p>
+    <h2>Perfil de la organización</h2>
+    <p class="modal-sub">El nombre aparece destacado en "Mi TOC". Visión y misión son un solo texto para toda la organización.</p>
     <form id="formPerfil">
+      <div class="field">
+        <label>Nombre de la organización (opcional)</label>
+        <input type="text" name="nombreOrganizacion" value="${esc(per.nombreOrganizacion)}" placeholder="Ej. Raíces y Dignidad A.C.">
+      </div>
       <div class="field">
         <label>Visión (opcional)</label>
         <textarea name="vision" placeholder="El futuro que buscamos contribuir a construir...">${esc(per.vision)}</textarea>
@@ -1812,8 +1728,8 @@ function viewProyectos(){
     { key:'objetivoGeneralId', label:'Objetivo general', opciones: Store.data.objetivosGenerales.map(g=>({ value:g.id, label:`${numeroObjetivoGeneral(g.id)} — ${g.nombre}` })) },
     { key:'objetivoEspecificoId', label:'Objetivo específico', opciones: Store.data.objetivosEspecificos.map(e=>({ value:e.id, label:`${numeroObjetivoEspecifico(e.id)} — ${e.nombre}` })) },
     { key:'donante', label:'Financiamiento', opciones: Array.from(new Set(Store.data.proyectos.map(p=>p.donante).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'es')).map(v=>({value:v,label:v})) },
-    { key:'semaforoEjecucionCode', label:'Semáforo de ejecución', opciones: ['verde','amarillo','rojo','gris'].map(code=>({value:code, label:SEMAFORO_DEFS[code].label})) },
-    { key:'semaforoIndicadoresCode', label:'Semáforo de indicadores', opciones: ['verde','amarillo','gris'].map(code=>({value:code, label:SEMAFORO_INDICADOR_DEFS[code].label})) }
+    { key:'semaforoEjecucionCode', label:'Semáforo de actividades', opciones: ['verde','amarillo','rojo','gris'].map(code=>({value:code, label:SEMAFORO_DEFS[code].label})) },
+    { key:'semaforoIndicadoresCode', label:'Semáforo de proyecto', opciones: ['verde','amarillo','gris'].map(code=>({value:code, label:SEMAFORO_INDICADOR_DEFS[code].label})) }
   ];
 
   const filtrados = aplicarFiltrosColumna(filtrarFilas(all, searchFn, st.search), st.filtros, filterGetters);
@@ -1828,7 +1744,7 @@ function viewProyectos(){
       <button class="btn btn-accent" data-action="new-proyecto" ${hayObjEspecificos?'':'disabled'}>+ Nuevo proyecto</button>
     </div>
     ${!hayObjEspecificos ? emptyState('Primero define tu Teoría de Cambio', 'Ve a la pestaña "Mi TOC" y crea al menos un objetivo general con su objetivo específico.') : ''}
-    ${searchBar('proyectos', 'Buscar por nombre, responsable, financiamiento u objetivo...', all.length, rows.length)}
+    ${searchBar('proyectos', 'Buscar proyecto por nombre, responsable, financiamiento u objetivo...', all.length, rows.length)}
     ${ all.length ? renderFiltrosBar('proyectos', filtrosConfig) : '' }
     <div class="table-wrap table-scroll">
       <table>
@@ -1841,8 +1757,8 @@ function viewProyectos(){
           ${thSort('Fin','fechaFin','proyectos')}
           ${thSort('Resultados','nRes','proyectos')}
           ${thSort('Actividades','nAct','proyectos')}
-          ${thSort('Semáforo de ejecución','semaforoEjecucion','proyectos')}
-          ${thSort('Semáforo de indicadores','semaforoIndicadores','proyectos')}
+          ${thSort('Semáforo de actividades','semaforoEjecucion','proyectos')}
+          ${thSort('Semáforo de proyecto','semaforoIndicadores','proyectos')}
           <th></th>
         </tr></thead>
         <tbody>
@@ -2187,7 +2103,7 @@ function viewActividades(){
       <button class="btn btn-accent" data-action="new-actividad" ${Store.data.proyectos.length?'':'disabled'}>+ Nueva actividad</button>
     </div>
     ${!Store.data.proyectos.length ? emptyState('Primero crea un proyecto', 'Las actividades siempre pertenecen a un proyecto.') : ''}
-    ${searchBar('actividades', 'Buscar por actividad, proyecto, resultado, área, responsable...', all.length, rows.length)}
+    ${searchBar('actividades', 'Buscar actividad por nombre, proyecto, resultado, área, responsable...', all.length, rows.length)}
     ${ all.length ? renderFiltrosBar('actividades', filtrosConfig) : '' }
     <div class="table-wrap table-scroll">
       <table>
@@ -2528,6 +2444,77 @@ function viewResponsables(){
   `;
 }
 
+/* ---------------- Formatos de seguimiento ---------------- */
+let formatoTipoSeleccionado = 'proyecto';
+let formatoIncluirCompletadas = false;
+
+function viewFormatos(){
+  const tipo = formatoTipoSeleccionado;
+  const proyectosDisp = Store.data.proyectos;
+  const areasDisp = Array.from(new Set(Store.data.actividades.map(a=>a.areaResponsable).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'es'));
+  const responsablesDisp = Store.data.responsables;
+
+  const config = {
+    proyecto: {
+      label: 'Proyecto',
+      opciones: proyectosDisp.length ? proyectosDisp.map(p=>`<option value="${p.id}">${esc(p.nombre)}</option>`).join('') : `<option value="">Aún no tienes proyectos</option>`,
+      hayDatos: proyectosDisp.length > 0,
+    },
+    area: {
+      label: 'Área',
+      opciones: areasDisp.length ? areasDisp.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('') : `<option value="">Aún no hay áreas registradas en actividades</option>`,
+      hayDatos: areasDisp.length > 0,
+    },
+    responsable: {
+      label: 'Responsable',
+      opciones: responsablesDisp.length ? responsablesDisp.map(r=>`<option value="${r.id}">${esc(r.nombre)}</option>`).join('') : `<option value="">Aún no tienes responsables</option>`,
+      hayDatos: responsablesDisp.length > 0,
+    },
+  }[tipo];
+
+  const hayAlgunDato = proyectosDisp.length || areasDisp.length || responsablesDisp.length;
+
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Formatos</h1>
+        <p>Genera formatos en Word para que las áreas o responsables reporten sus avances en papel, y tú los transcribas fácil dentro de MetaTrace.</p>
+      </div>
+    </div>
+    ${!hayAlgunDato ? emptyState('Aún no hay nada que generar', 'Crea al menos un proyecto, una actividad con área, o un responsable para poder generar un formato.') : ''}
+
+    <div class="field" style="max-width:520px;">
+      <label>¿Qué quieres generar?</label>
+      <select id="selFormatoTipo">
+        <option value="proyecto" ${tipo==='proyecto'?'selected':''}>Reporte general de un proyecto completo</option>
+        <option value="area" ${tipo==='area'?'selected':''}>Actividades de un área específica</option>
+        <option value="responsable" ${tipo==='responsable'?'selected':''}>Actividades de un responsable específico</option>
+      </select>
+      <div class="field-hint">
+        ${tipo==='proyecto' ? 'Organizado por Resultado, con sus actividades e indicadores — ideal para un corte semestral o anual de todo el proyecto.' : ''}
+        ${tipo==='area' ? 'Junta las actividades de esa área aunque pertenezcan a proyectos distintos, agrupadas por proyecto.' : ''}
+        ${tipo==='responsable' ? 'Junta las actividades de esa persona aunque pertenezcan a proyectos distintos, agrupadas por proyecto.' : ''}
+      </div>
+    </div>
+
+    <div class="field" style="max-width:520px;">
+      <label>${config.label}</label>
+      <select id="selFormatoObjetivo">${config.opciones}</select>
+    </div>
+
+    <div class="field" style="max-width:520px;">
+      <label class="checkbox-label">
+        <input type="checkbox" id="chkFormatoIncluirCompletadas" ${formatoIncluirCompletadas?'checked':''}>
+        Incluir actividades e indicadores ya completados
+      </label>
+      <div class="field-hint">Desmarcado (lo normal), el formato solo trae lo que todavía falta por reportar — así nadie tiene que volver a llenar algo que ya se cerró.</div>
+    </div>
+
+    <button class="btn btn-accent" data-action="descargar-formato" ${config.hayDatos?'':'disabled'}>📝 Descargar formato (Word)</button>
+    <div class="field-hint" style="max-width:520px; margin-top:14px;">Se descarga como archivo <b>.doc</b> — Word lo abre, edita y guarda con normalidad, sin necesitar ningún programa especial. Los datos que ya se conocen vienen impresos, incluyendo el último valor registrado; solo quedan en blanco los que hay que llenar a mano.</div>
+  `;
+}
+
 function formResponsable(existing){
   const r = existing || { nombre:'', rol:'', area:'', organizacion:'', contacto:'' };
   return `
@@ -2777,6 +2764,16 @@ document.addEventListener('change', (e)=>{
     }
     return;
   }
+  // Cambiar el tipo de formato a generar (Proyectos / Actividades) — refresca el segundo desplegable
+  if(e.target.id === 'selFormatoTipo'){
+    formatoTipoSeleccionado = e.target.value;
+    renderView();
+    return;
+  }
+  if(e.target.id === 'chkFormatoIncluirCompletadas'){
+    formatoIncluirCompletadas = e.target.checked;
+    return;
+  }
 });
 
 /* ---------------- Event binding (delegado, cubre también el contenido del modal) ---------------- */
@@ -2836,8 +2833,33 @@ document.addEventListener('input', (e)=>{
 function handleAction(action, id, idx){
   if(action==='ir-actividades-sin-resultado'){ currentSection='actividades'; renderNav(); renderView(); return; }
   if(action==='limpiar-filtros'){
-    if(tableState[id]) tableState[id].filtros = {};
+    if(tableState[id]){
+      tableState[id].filtros = {};
+      tableState[id].search = '';
+    }
     renderView();
+    return;
+  }
+  if(action==='descargar-formato'){
+    const tipo = document.getElementById('selFormatoTipo')?.value;
+    const valor = document.getElementById('selFormatoObjetivo')?.value;
+    const incluirCompletadas = !!document.getElementById('chkFormatoIncluirCompletadas')?.checked;
+    formatoIncluirCompletadas = incluirCompletadas;
+    if(!valor){ showToast('No hay nada que descargar todavía'); return; }
+    let rtf = null, nombre = 'Formato';
+    if(tipo === 'proyecto'){
+      const p = Store.get('proyectos', valor);
+      rtf = construirFormatoProyectoRTF(valor, incluirCompletadas);
+      nombre = `Formato de proyecto - ${p ? p.nombre : 'proyecto'}`;
+    } else if(tipo === 'area'){
+      rtf = construirFormatoAreaRTF(valor, incluirCompletadas);
+      nombre = `Formato de area - ${valor}`;
+    } else if(tipo === 'responsable'){
+      const r = Store.get('responsables', valor);
+      rtf = construirFormatoResponsableRTF(valor, incluirCompletadas);
+      nombre = `Formato de responsable - ${r ? r.nombre : 'responsable'}`;
+    }
+    descargarRTF(rtf, nombre);
     return;
   }
   if(action==='ver-actividades-responsable'){
@@ -3068,7 +3090,7 @@ document.addEventListener('submit', (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
     const data = Object.fromEntries(fd.entries());
-    Store.data.perfil = { vision: data.vision || '', mision: data.mision || '' };
+    Store.data.perfil = { nombreOrganizacion: data.nombreOrganizacion || '', vision: data.vision || '', mision: data.mision || '' };
     Store.save();
     closeModal();
     renderView();
@@ -3147,7 +3169,7 @@ function exportData(){
   const a = document.createElement('a');
   const stamp = todayISO();
   a.href = url;
-  a.download = `cometa_respaldo_${stamp}.json`;
+  a.download = `metatrace_respaldo_${stamp}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -3182,7 +3204,7 @@ function importData(file){
 function wipeAll(){
   if(confirm('Esto eliminará TODOS los datos guardados en este dispositivo. ¿Deseas continuar?')){
     if(confirm('Confirma una vez más: se perderá tu Teoría de Cambio completa, proyectos, actividades y responsables.')){
-      Store.data = { perfil:{vision:'',mision:''}, objetivosGenerales: [], objetivosEspecificos: [], proyectos: [], actividades: [], responsables: [] };
+      Store.data = { perfil:{nombreOrganizacion:'',vision:'',mision:''}, objetivosGenerales: [], objetivosEspecificos: [], proyectos: [], actividades: [], responsables: [] };
       Store.save();
       resetCambiosDesdeRespaldo();
       renderView();
@@ -3294,8 +3316,8 @@ function renderProyectoReporteHtml(p, opciones){
       <div class="rep-info-card"><div class="lbl">Financiamiento / Origen del presupuesto</div><div class="val">${esc(p.donante||'—')}</div></div>
       <div class="rep-info-card"><div class="lbl">Periodo</div><div class="val">${fmtDate(p.fechaInicio)} – ${fmtDate(p.fechaFin)}</div></div>
       <div class="rep-info-card"><div class="lbl">Avance promedio de actividades</div><div class="val">${barraReporte(avgPct)}</div></div>
-      <div class="rep-info-card"><div class="lbl">Semáforo de ejecución</div><div class="val">${chipReporte(semEjec)}</div></div>
-      <div class="rep-info-card"><div class="lbl">Semáforo de indicadores</div><div class="val">${chipReporte(semInd)}</div></div>
+      <div class="rep-info-card"><div class="lbl">Semáforo de actividades</div><div class="val">${chipReporte(semEjec)}</div></div>
+      <div class="rep-info-card"><div class="lbl">Semáforo de proyecto</div><div class="val">${chipReporte(semInd)}</div></div>
     </div>`;
 
   const cuerpo = `
@@ -3460,8 +3482,8 @@ function abrirReporteObjetivoGeneral(ogId){
         <div class="rep-info-grid" style="grid-template-columns:repeat(4,1fr);">
           <div class="rep-info-card"><div class="lbl">Proyectos</div><div class="val">${proyectosDeE.length}</div></div>
           <div class="rep-info-card"><div class="lbl">Avance agregado</div><div class="val">${barraReporte(avgE)}</div></div>
-          <div class="rep-info-card"><div class="lbl">Semáforo de ejecución</div><div class="val">${chipReporte(semE)}</div></div>
-          <div class="rep-info-card"><div class="lbl">Semáforo de indicadores</div><div class="val">${chipReporte(semIndE)}</div></div>
+          <div class="rep-info-card"><div class="lbl">Semáforo de actividades</div><div class="val">${chipReporte(semE)}</div></div>
+          <div class="rep-info-card"><div class="lbl">Semáforo de proyecto</div><div class="val">${chipReporte(semIndE)}</div></div>
         </div>
         ${bloquesProyectos}
       </div>`;
@@ -3475,8 +3497,8 @@ function abrirReporteObjetivoGeneral(ogId){
       <div class="rep-info-card"><div class="lbl">Proyectos</div><div class="val">${proyectos.length}</div></div>
       <div class="rep-info-card"><div class="lbl">Actividades totales</div><div class="val">${nActividadesTotal}</div></div>
       <div class="rep-info-card"><div class="lbl">Avance promedio agregado</div><div class="val">${barraReporte(avgPct)}</div></div>
-      <div class="rep-info-card"><div class="lbl">Semáforo de ejecución</div><div class="val">${chipReporte(semEjec)}</div></div>
-      <div class="rep-info-card"><div class="lbl">Semáforo de indicadores</div><div class="val">${chipReporte(semInd)}</div></div>
+      <div class="rep-info-card"><div class="lbl">Semáforo de actividades</div><div class="val">${chipReporte(semEjec)}</div></div>
+      <div class="rep-info-card"><div class="lbl">Semáforo de proyecto</div><div class="val">${chipReporte(semInd)}</div></div>
     </div>
     ${bloquesEspecificos}
   `;
@@ -3497,8 +3519,8 @@ function buildSheetsData(){
     'Descripción': g.descripcion||'',
     'N° Objetivos específicos': Store.data.objetivosEspecificos.filter(e=>e.objetivoGeneralId===g.id).length,
     '% Avance agregado': calcularAvancePromedioObjetivoGeneral(g.id),
-    'Semáforo de ejecución': calcularSemaforoProyectosObjetivoGeneral(g.id).label,
-    'Semáforo de indicadores': calcularSemaforoIndicadoresObjetivoGeneral(g.id).label
+    'Semáforo de actividades': calcularSemaforoProyectosObjetivoGeneral(g.id).label,
+    'Semáforo de proyecto': calcularSemaforoIndicadoresObjetivoGeneral(g.id).label
   }));
 
   const objetivosEspecificos = Store.data.objetivosEspecificos.map(e=>({
@@ -3508,8 +3530,8 @@ function buildSheetsData(){
     'Descripción': e.descripcion||'',
     'N° Proyectos': Store.data.proyectos.filter(p=>p.objetivoEspecificoId===e.id).length,
     '% Avance agregado': calcularAvancePromedioObjetivoEspecifico(e.id),
-    'Semáforo de ejecución': calcularSemaforoProyectosObjetivoEspecifico(e.id).label,
-    'Semáforo de indicadores': calcularSemaforoIndicadoresObjetivoEspecifico(e.id).label
+    'Semáforo de actividades': calcularSemaforoProyectosObjetivoEspecifico(e.id).label,
+    'Semáforo de proyecto': calcularSemaforoIndicadoresObjetivoEspecifico(e.id).label
   }));
 
   const proyectosMap = Object.fromEntries(Store.data.proyectos.map(p=>[p.id, p.nombre]));
@@ -3525,8 +3547,8 @@ function buildSheetsData(){
       'Fecha inicio': fmtDate(p.fechaInicio),
       'Fecha fin': fmtDate(p.fechaFin),
       '% Avance promedio': calcularAvancePromedio(p.id),
-      'Semáforo de ejecución': calcularSemaforoProyecto(p.id).label,
-      'Semáforo de indicadores': calcularSemaforoIndicadoresProyecto(p.id).label,
+      'Semáforo de actividades': calcularSemaforoProyecto(p.id).label,
+      'Semáforo de proyecto': calcularSemaforoIndicadoresProyecto(p.id).label,
       'N° Resultados': (p.resultados||[]).length,
       'N° Actividades': Store.data.actividades.filter(a=>a.proyectoId===p.id).length
     };
@@ -3641,6 +3663,309 @@ function buildSheetsData(){
   };
 }
 
+/* ---------------- Formatos de seguimiento (Word / .doc vía RTF) ----------------
+   Se genera texto en formato RTF — Word lo abre y edita como cualquier documento
+   normal, y no requiere ninguna librería nueva dentro de la app (a diferencia de
+   un .docx real, que es un ZIP con XML adentro). Probado contra LibreOffice antes
+   de integrarlo aquí. */
+
+const CP1252 = {
+  'á':0xE1,'é':0xE9,'í':0xED,'ó':0xF3,'ú':0xFA,'ñ':0xF1,'ü':0xFC,
+  'Á':0xC1,'É':0xC9,'Í':0xCD,'Ó':0xD3,'Ú':0xDA,'Ñ':0xD1,'Ü':0xDC,
+  '¿':0xBF,'¡':0xA1,'—':0x97,'–':0x96,'·':0xB7
+};
+function rtfEscapeChar(ch){
+  const code = ch.codePointAt(0);
+  if(ch === '\\' || ch === '{' || ch === '}') return '\\' + ch;
+  if(code < 128) return ch;
+  if(CP1252[ch] !== undefined) return "\\'" + CP1252[ch].toString(16).padStart(2,'0');
+  return '\\u' + code + '?';
+}
+function rtfText(str){ return Array.from(String(str ?? '')).map(rtfEscapeChar).join(''); }
+function rtfRunProps(style){
+  style = style || {};
+  let s = '';
+  if(style.size) s += '\\fs' + style.size;
+  if(style.bold) s += '\\b';
+  if(style.italic) s += '\\i';
+  if(style.color !== undefined) s += '\\cf' + style.color;
+  return s;
+}
+function rtfParagraph(runs, pOpts){
+  pOpts = pOpts || {};
+  let props = '\\pard';
+  if(pOpts.align === 'center') props += '\\qc';
+  if(pOpts.spaceBefore) props += '\\sb' + pOpts.spaceBefore;
+  props += '\\sa' + (pOpts.spaceAfter !== undefined ? pOpts.spaceAfter : 120);
+  if(pOpts.borderBottom){
+    props += '\\brdrb\\brdrs\\brdrw' + (pOpts.borderBottom.width||10);
+    if(pOpts.borderBottom.color !== undefined) props += '\\brdrcf' + pOpts.borderBottom.color;
+  }
+  const list = Array.isArray(runs) ? runs : [runs];
+  const runsStr = list.map(r => {
+    const t = typeof r === 'string' ? r : r.text;
+    const rp = rtfRunProps(r);
+    return '{' + (rp?rp+' ':'') + rtfText(t) + '}';
+  }).join('');
+  return props + ' ' + runsStr + '\\par\n';
+}
+// cells: [{ lines:[{text,size,bold,italic,color}], shade }], colWidths: anchos (no acumulados, en twips)
+function rtfTableRow(cells, colWidths, opts){
+  opts = opts || {};
+  const borderColor = opts.borderColor !== undefined ? opts.borderColor : RTF_C.BORDERCARD;
+  let out = '\\trowd\\trgaph80\\trleft0\\trpaddl90\\trpaddr90\\trpaddt70\\trpaddb70\\trpaddfl3\\trpaddfr3\\trpaddft3\\trpaddfb3\n';
+  let cum = 0;
+  colWidths.forEach((w, i) => {
+    cum += w;
+    out += '\\clvertalt';
+    out += '\\clbrdrt\\brdrs\\brdrw5\\brdrcf' + borderColor;
+    out += '\\clbrdrl\\brdrs\\brdrw5\\brdrcf' + borderColor;
+    out += '\\clbrdrb\\brdrs\\brdrw5\\brdrcf' + borderColor;
+    out += '\\clbrdrr\\brdrs\\brdrw5\\brdrcf' + borderColor;
+    if(cells[i] && cells[i].shade !== undefined) out += '\\clshdng0\\clcbpat' + cells[i].shade;
+    out += '\\cellx' + cum + '\n';
+  });
+  cells.forEach(c => {
+    const lines = c.lines || [{text: c.text || ' ', size:c.size, bold:c.bold, color:c.color}];
+    lines.forEach((ln, li) => {
+      out += '\\pard\\intbl';
+      const rp = rtfRunProps(ln);
+      out += (rp ? rp + ' ' : ' ') + rtfText(ln.text || ' ');
+      out += (li < lines.length-1) ? '\\line ' : '';
+    });
+    out += '\\cell\n';
+  });
+  out += '\\row\n';
+  return out;
+}
+function rtfDoc(bodyContent){
+  return '{\\rtf1\\ansi\\ansicpg1252\\deff0\\deflang3082\n' +
+    '{\\fonttbl{\\f0\\fswiss\\fcharset0 Calibri;}}\n' +
+    '{\\colortbl;' +
+    '\\red30\\green58\\blue58;'      + // 1 TEAL
+    '\\red201\\green138\\blue22;'    + // 2 GOLD
+    '\\red103\\green105\\blue108;'   + // 3 GRAYTXT
+    '\\red138\\green143\\blue140;'   + // 4 GRAYMUTED
+    '\\red185\\green182\\blue172;'   + // 5 GRAYLINE
+    '\\red20\\green35\\blue31;'      + // 6 DARK
+    '\\red255\\green255\\blue255;'   + // 7 WHITE
+    '\\red250\\green250\\blue248;'   + // 8 BGCARD
+    '\\red231\\green231\\blue228;'   + // 9 BORDERCARD
+    '\\red241\\green239\\blue233;'   + // 10 HEADBG
+    '\\red176\\green175\\blue168;'   + // 11 FOOTNOTE
+    '\\red108\\green91\\blue155;'    + // 12 PURPLE
+    '}\n' +
+    '\\viewkind4\\uc1\\pard\\sa120\\fs18\\f0\n' +
+    bodyContent +
+    '}';
+}
+const RTF_C = { TEAL:1, GOLD:2, GRAYTXT:3, GRAYMUTED:4, GRAYLINE:5, DARK:6, WHITE:7, BGCARD:8, BORDERCARD:9, HEADBG:10, FOOTNOTE:11, PURPLE:12 };
+const RTF_CONTENT_W = 9360;
+
+function descargarRTF(contenidoRTF, nombreArchivo){
+  if(!contenidoRTF){ showToast('No se pudo generar el formato'); return; }
+  const blob = new Blob([contenidoRTF], {type:'application/rtf'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombreArchivo.endsWith('.doc') ? nombreArchivo : nombreArchivo + '.doc';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Formato descargado');
+}
+
+// "Se mide en: % de avance" o "Meta: 120 familias beneficiadas" — evita la ambigüedad de qué
+// escribir en la columna de avance nuevo cuando la actividad no se mide en porcentaje.
+function unidadTextoActividad(a){
+  if(a.modoAvance === 'meta'){
+    const total = (a.metaTotal !== '' && a.metaTotal != null) ? a.metaTotal : '?';
+    const unidad = a.metaUnidad ? ' ' + a.metaUnidad : '';
+    return `Meta: ${total}${unidad}`;
+  }
+  return 'Se mide en: % de avance';
+}
+// Igual que unidadTextoActividad, pero además agrega el último valor ya registrado (y su fecha, si
+// existe histórico) — así quien llena el formato tiene a la vista dónde iba, en vez de adivinar.
+function contextoAvanceActividad(a){
+  const base = unidadTextoActividad(a);
+  let valorTxt;
+  if(a.modoAvance === 'meta'){
+    const alcanzada = (a.metaAlcanzada !== '' && a.metaAlcanzada != null) ? a.metaAlcanzada : '0';
+    const total = (a.metaTotal !== '' && a.metaTotal != null) ? a.metaTotal : '?';
+    valorTxt = `${alcanzada} de ${total}`;
+  } else {
+    valorTxt = `${Number(a.avance)||0}%`;
+  }
+  const historial = Array.isArray(a.historial) ? a.historial : [];
+  const ultima = historial.length ? historial[historial.length-1] : null;
+  const fechaTxt = (ultima && ultima.fecha) ? ` (${fmtDate(ultima.fecha)})` : '';
+  return `${base} — último valor registrado: ${valorTxt}${fechaTxt}`;
+}
+function indicadorValoresTexto(ind){
+  if(ind.tipo === 'cualitativo'){
+    const nivel = likertPorValor(ind.nivelActual);
+    return { base:'—', meta:'—', anterior: nivel ? nivel.label : 'Sin evaluar' };
+  }
+  const u = ind.unidad ? ' ' + ind.unidad : '';
+  return {
+    base: (ind.lineaBase !== '' && ind.lineaBase != null) ? ind.lineaBase + u : '—',
+    meta: (ind.meta !== '' && ind.meta != null) ? ind.meta + u : '—',
+    anterior: (ind.valorActual !== '' && ind.valorActual != null) ? ind.valorActual + u : '—',
+  };
+}
+// Un indicador se considera "ya completado" si alcanzó su meta (cuantitativo) o si su nivel
+// cualitativo está en "Cumplido" — mismo criterio que ya usa el semáforo verde de indicadores.
+function indicadorEstaCompletado(ind){
+  if(ind.tipo === 'cualitativo') return ind.nivelActual === 'cumplido';
+  const av = calcularAvanceIndicador(ind);
+  return av !== null && av >= 100;
+}
+
+function construirPieFirmaRTF(){
+  const sigW = Math.floor(RTF_CONTENT_W/4);
+  const sigWidths = [sigW,sigW,sigW, RTF_CONTENT_W-3*sigW];
+  let out = rtfParagraph({text:' '}, {spaceAfter:200});
+  out += rtfTableRow(['Nombre de quien reporta','Cargo / área','Fecha','Firma'].map(t=>({lines:[{text:t, size:15, color:RTF_C.GRAYTXT}]})), sigWidths, {borderColor:RTF_C.WHITE});
+  out += rtfTableRow([0,1,2,3].map(()=>({lines:[{text:' ', size:8}]})), sigWidths, {borderColor:RTF_C.GRAYLINE});
+  out += rtfParagraph({text:'MetaTrace — una app de Colectivo META (COMETA)', size:14, color:RTF_C.FOOTNOTE}, {spaceBefore:200, spaceAfter:20, align:'center'});
+  out += rtfParagraph({text:'Al recibir esta hoja llena, transcribe los datos directo en "Registrar avance" dentro de la app.', size:14, color:RTF_C.FOOTNOTE}, {spaceAfter:0, align:'center'});
+  return out;
+}
+function rtfHeadCell(t){ return {shade:RTF_C.HEADBG, lines:[{text:t, size:14, bold:true, color:RTF_C.GRAYTXT}]}; }
+function rtfTxtCell(t, opts){ opts=opts||{}; return {lines:[{text:String(t), size:18, color:opts.color}]}; }
+function rtfActCell(nombre, unidad){ return {lines:[{text:nombre, size:18}, {text:unidad, size:14, italic:true, color:RTF_C.GRAYMUTED}]}; }
+
+function construirFormatoProyectoRTF(proyectoId, incluirCompletadas){
+  const p = Store.get('proyectos', proyectoId);
+  if(!p) return null;
+  const objEsp = Store.get('objetivosEspecificos', p.objetivoEspecificoId);
+  const objGen = objEsp ? Store.get('objetivosGenerales', objEsp.objetivoGeneralId) : null;
+  const resultados = Array.isArray(p.resultados) ? p.resultados : [];
+  const avg = calcularAvancePromedio(p.id);
+
+  let b = '';
+  b += rtfParagraph({text:'FORMATO DE REPORTE GENERAL DE PROYECTO — PERIÓDICO (SEMESTRAL / ANUAL)', bold:true, size:15, color:RTF_C.GOLD}, {spaceAfter:40});
+  b += rtfParagraph({text:p.nombre||'', bold:true, size:34, color:RTF_C.DARK}, {spaceAfter:60});
+  const traza = [
+    objGen ? `${numeroObjetivoGeneral(objGen.id)} — ${objGen.nombre}` : '',
+    objEsp ? `${numeroObjetivoEspecifico(objEsp.id)} — ${objEsp.nombre}` : '',
+  ].filter(Boolean).join('  ·  ');
+  b += rtfParagraph({text: traza || ' ', size:19, color:RTF_C.GRAYMUTED}, {spaceAfter:180, borderBottom:{width:20,color:RTF_C.TEAL}});
+
+  const w4 = Math.floor(RTF_CONTENT_W/4);
+  const infoW = [w4,w4,w4, RTF_CONTENT_W-3*w4];
+  function infoCell(label, value){
+    return { shade:RTF_C.BGCARD, lines:[
+      {text:label.toUpperCase(), size:12, bold:true, color:RTF_C.GRAYMUTED},
+      {text:String(value), size:17, bold:true, color:RTF_C.DARK},
+    ]};
+  }
+  b += rtfTableRow([
+    infoCell('Responsable general', nombreResponsableProyecto(p)||'Sin asignar'),
+    infoCell('Financiamiento', p.donante || 'Sin especificar'),
+    infoCell('Periodo del proyecto', `${fmtDate(p.fechaInicio)} – ${fmtDate(p.fechaFin)}`),
+    infoCell('Avance registrado', avg + '%'),
+  ], infoW);
+
+  b += rtfParagraph({text:'Periodo que cubre este reporte (ej. enero – junio 2026):', size:18, color:RTF_C.GRAYTXT}, {spaceBefore:180, spaceAfter:50});
+  b += rtfParagraph({text:' '}, {spaceAfter:140, borderBottom:{width:6,color:RTF_C.GRAYLINE}});
+  b += rtfParagraph({text:'Área / coordinación que reporta:', size:18, color:RTF_C.GRAYTXT}, {spaceAfter:50});
+  b += rtfParagraph({text:' '}, {spaceAfter:120, borderBottom:{width:6,color:RTF_C.GRAYLINE}});
+
+  if(!resultados.length){
+    b += rtfParagraph({text:'Este proyecto aún no tiene resultados registrados.', italic:true, size:18, color:RTF_C.GRAYMUTED}, {spaceBefore:160});
+  }
+
+  resultados.forEach(res => {
+    const actividadesTodas = Store.data.actividades.filter(a=>a.proyectoId===p.id && a.resultadoId===res.id);
+    const indicadoresTodos = Array.isArray(res.indicadores) ? res.indicadores : [];
+    const actividadesDe = incluirCompletadas ? actividadesTodas : actividadesTodas.filter(a=>a.estado!=='terminado');
+    const indicadoresDe = incluirCompletadas ? indicadoresTodos : indicadoresTodos.filter(ind=>!indicadorEstaCompletado(ind));
+
+    b += rtfTableRow([{shade:RTF_C.PURPLE, lines:[{text:'  RESULTADO  ', size:14, bold:true, color:RTF_C.WHITE}]}], [RTF_CONTENT_W], {borderColor:RTF_C.PURPLE});
+    b += rtfParagraph({text:res.nombre||'', bold:true, size:23, color:RTF_C.DARK}, {spaceBefore:60, spaceAfter:90, borderBottom:{width:12,color:RTF_C.BORDERCARD}});
+
+    b += rtfParagraph({text:'ACTIVIDADES', bold:true, size:14, color:RTF_C.GRAYMUTED}, {spaceAfter:50});
+    const actW = [3400,1300,1700,1500, RTF_CONTENT_W-3400-1300-1700-1500];
+    if(actividadesDe.length){
+      b += rtfTableRow([rtfHeadCell('ACTIVIDAD'),rtfHeadCell('FECHA LÍMITE'),rtfHeadCell('¿COMPLETADA?'),rtfHeadCell('AVANCE NUEVO'),rtfHeadCell('NOTAS')], actW);
+      actividadesDe.forEach(a=>{
+        b += rtfTableRow([rtfActCell(a.nombre||'', contextoAvanceActividad(a)), rtfTxtCell(fmtDate(a.fechaFin),{color:RTF_C.GRAYTXT}), rtfTxtCell('☐ sí   ☐ no',{color:RTF_C.GRAYMUTED}), rtfTxtCell(' '), rtfTxtCell(' ')], actW);
+      });
+    } else if(actividadesTodas.length){
+      b += rtfParagraph({text:'Todas las actividades de este resultado ya están completadas.', italic:true, size:16, color:RTF_C.GRAYMUTED}, {spaceAfter:100});
+    } else {
+      b += rtfParagraph({text:'Sin actividades registradas todavía.', italic:true, size:16, color:RTF_C.GRAYMUTED}, {spaceAfter:100});
+    }
+
+    b += rtfParagraph({text:'INDICADORES', bold:true, size:14, color:RTF_C.GRAYMUTED}, {spaceBefore:140, spaceAfter:50});
+    const indW = [3600,1400,1400,1600, RTF_CONTENT_W-3600-1400-1400-1600];
+    if(indicadoresDe.length){
+      b += rtfTableRow([rtfHeadCell('INDICADOR'),rtfHeadCell('LÍNEA BASE'),rtfHeadCell('META'),rtfHeadCell('VALOR ANTERIOR'),rtfHeadCell('VALOR NUEVO')], indW);
+      indicadoresDe.forEach(ind=>{
+        const v = indicadorValoresTexto(ind);
+        b += rtfTableRow([rtfTxtCell(ind.nombre||''), rtfTxtCell(v.base,{color:RTF_C.GRAYTXT}), rtfTxtCell(v.meta,{color:RTF_C.GRAYTXT}), rtfTxtCell(v.anterior,{color:RTF_C.GRAYTXT}), rtfTxtCell(' ')], indW);
+      });
+    } else if(indicadoresTodos.length){
+      b += rtfParagraph({text:'Todos los indicadores de este resultado ya alcanzaron su meta.', italic:true, size:16, color:RTF_C.GRAYMUTED}, {spaceAfter:100});
+    } else {
+      b += rtfParagraph({text:'Sin indicadores registrados todavía.', italic:true, size:16, color:RTF_C.GRAYMUTED}, {spaceAfter:100});
+    }
+  });
+
+  b += construirPieFirmaRTF();
+  return rtfDoc(b);
+}
+
+function construirFormatoActividadesAgrupadasRTF(kicker, titulo, subtitulo, actividadesTodas, incluirCompletadas){
+  let b = '';
+  b += rtfParagraph({text:kicker, bold:true, size:15, color:RTF_C.GOLD}, {spaceAfter:40});
+  b += rtfParagraph({text:titulo, bold:true, size:34, color:RTF_C.DARK}, {spaceAfter:60});
+  b += rtfParagraph({text:subtitulo, size:19, color:RTF_C.GRAYMUTED}, {spaceAfter:180, borderBottom:{width:20,color:RTF_C.TEAL}});
+
+  b += rtfParagraph({text:'Periodo que cubre este reporte:', size:18, color:RTF_C.GRAYTXT}, {spaceAfter:50});
+  b += rtfParagraph({text:' '}, {spaceAfter:120, borderBottom:{width:6,color:RTF_C.GRAYLINE}});
+
+  const actividadesFiltradas = incluirCompletadas ? actividadesTodas : actividadesTodas.filter(a=>a.estado!=='terminado');
+
+  if(!actividadesFiltradas.length){
+    b += rtfParagraph({
+      text: actividadesTodas.length ? 'Todas las actividades de este criterio ya están completadas.' : 'No se encontraron actividades para este criterio.',
+      italic:true, size:18, color:RTF_C.GRAYMUTED
+    }, {spaceBefore:160});
+  } else {
+    const porProyecto = {};
+    actividadesFiltradas.forEach(a=>{
+      if(!porProyecto[a.proyectoId]) porProyecto[a.proyectoId] = [];
+      porProyecto[a.proyectoId].push(a);
+    });
+    Object.keys(porProyecto).forEach(pid=>{
+      const proy = Store.get('proyectos', pid);
+      const actW = [3200,1300,1700,1500, RTF_CONTENT_W-3200-1300-1700-1500];
+      b += rtfParagraph({text: proy ? proy.nombre : 'Proyecto no encontrado', bold:true, size:20, color:RTF_C.TEAL}, {spaceBefore:200, spaceAfter:70});
+      b += rtfTableRow([rtfHeadCell('ACTIVIDAD'),rtfHeadCell('FECHA LÍMITE'),rtfHeadCell('¿COMPLETADA?'),rtfHeadCell('AVANCE NUEVO'),rtfHeadCell('NOTAS')], actW);
+      porProyecto[pid].forEach(a=>{
+        b += rtfTableRow([rtfActCell(a.nombre||'', contextoAvanceActividad(a)), rtfTxtCell(fmtDate(a.fechaFin),{color:RTF_C.GRAYTXT}), rtfTxtCell('☐ sí   ☐ no',{color:RTF_C.GRAYMUTED}), rtfTxtCell(' '), rtfTxtCell(' ')], actW);
+      });
+    });
+  }
+
+  b += construirPieFirmaRTF();
+  return rtfDoc(b);
+}
+function construirFormatoAreaRTF(area, incluirCompletadas){
+  const todas = Store.data.actividades.filter(a=>(a.areaResponsable||'')===area);
+  return construirFormatoActividadesAgrupadasRTF('FORMATO DE SEGUIMIENTO POR ÁREA', area, 'Actividades asignadas a esta área, en todos los proyectos', todas, incluirCompletadas);
+}
+function construirFormatoResponsableRTF(responsableId, incluirCompletadas){
+  const resp = Store.get('responsables', responsableId);
+  if(!resp) return null;
+  const todas = Store.data.actividades.filter(a=>a.responsableId===responsableId);
+  return construirFormatoActividadesAgrupadasRTF('FORMATO DE SEGUIMIENTO POR RESPONSABLE', resp.nombre, 'Actividades asignadas a esta persona, en todos los proyectos', todas, incluirCompletadas);
+}
+
 function descargarBlob(blob, filename){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -3661,7 +3986,7 @@ function exportExcel(){
     const ws = rows.length ? XLSX.utils.json_to_sheet(rows) : XLSX.utils.aoa_to_sheet([['Sin datos aún']]);
     XLSX.utils.book_append_sheet(wb, ws, nombreHoja.slice(0,31)); // Excel limita el nombre de hoja a 31 caracteres
   });
-  XLSX.writeFile(wb, `cometa_datos_${todayISO()}.xlsx`);
+  XLSX.writeFile(wb, `metatrace_datos_${todayISO()}.xlsx`);
   showToast('Excel descargado');
 }
 
@@ -3677,7 +4002,7 @@ function exportCSV(){
     const csv = XLSX.utils.sheet_to_csv(ws);
     const blob = new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8;'}); // BOM para tildes/ñ en Excel
     setTimeout(()=>{
-      descargarBlob(blob, `cometa_${slug(nombreHoja)}_${todayISO()}.csv`);
+      descargarBlob(blob, `metatrace_${slug(nombreHoja)}_${todayISO()}.csv`);
     }, i * 350); // pequeño retraso entre descargas para que el navegador no las bloquee
   });
   showToast('Descargando archivos CSV...');
