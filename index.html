@@ -472,6 +472,10 @@
   .dash-carga-bar .seg.rojo{ background: var(--color-rojo); }
   .dash-carga-bar .seg.gris{ background: var(--color-gris); }
   .dash-carga-avg{ font-size:11.5px; font-weight:700; color:var(--color-primary); min-width:56px; text-align:right; }
+  .dash-carga-cols{ display:grid; grid-template-columns:1fr 1fr; gap:28px; align-items:start; }
+  .dash-carga-cols > div{ min-width:0; }
+  .dash-carga-cols h2{ margin-top:0; }
+  @media (max-width: 1000px){ .dash-carga-cols{ grid-template-columns:1fr; gap:26px; } }
   .empty-state{
     background: var(--color-surface); border: 1.5px dashed var(--color-border); border-radius: var(--radius-m);
     padding: 40px 24px; text-align:center; color: var(--color-text-soft); font-size:13.5px;
@@ -642,7 +646,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    ========================================================= */
 
 const STORAGE_KEY = 'cometa_data_v2';
-const APP_VERSION = '0.8.1'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
+const APP_VERSION = '0.9.0'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
 
 function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -1137,6 +1141,45 @@ function renderCargaResponsablesHtml(cargas){
   }).join('')}</div>`;
 }
 
+/* Igual que calcularCargaResponsables, pero agrupando por "Área responsable" de la actividad. */
+function calcularCargaAreas(){
+  const porArea = {};
+  Store.data.actividades.forEach(a=>{
+    const area = (a.areaResponsable || '').trim();
+    if(!area) return;
+    if(!porArea[area]) porArea[area] = { verde:0, amarillo:0, rojo:0, gris:0, total:0, sumaAvance:0 };
+    const b = porArea[area];
+    b[calcularSemaforo(a).code]++;
+    b.total++;
+    b.sumaAvance += Number(a.avance)||0;
+  });
+  return Object.keys(porArea).map(area=>{
+    const b = porArea[area];
+    return { area, ...b, avgAvance: b.total ? Math.round(b.sumaAvance / b.total) : 0 };
+  }).sort((a,b) => b.rojo - a.rojo || b.total - a.total || a.area.localeCompare(b.area,'es'));
+}
+
+function renderCargaAreasHtml(cargas){
+  if(!cargas.length) return emptyState('Aún no hay actividades con área asignada', 'Asigna un "Área responsable" a tus actividades para ver aquí la carga de trabajo por área.');
+  return `<div class="dash-carga-list">${cargas.map(c=>{
+    const pct = n => c.total ? Math.round(n/c.total*100) : 0;
+    return `
+      <div class="dash-carga-row" data-action="ver-actividades-area" data-id="${esc(c.area)}">
+        <div class="dash-carga-main">
+          <b>${esc(c.area)}</b>
+          <span class="dash-carga-sub">Área responsable</span>
+        </div>
+        <div class="dash-carga-stats">
+          <span class="dash-carga-count">${c.total} actividad${c.total===1?'':'es'}</span>
+          <div class="dash-carga-bar" title="Ejecutadas: ${c.verde} · En proceso: ${c.amarillo} · Retrasadas: ${c.rojo} · No iniciadas: ${c.gris}">
+            ${c.verde?`<span class="seg verde" style="width:${pct(c.verde)}%"></span>`:''}${c.amarillo?`<span class="seg amarillo" style="width:${pct(c.amarillo)}%"></span>`:''}${c.rojo?`<span class="seg rojo" style="width:${pct(c.rojo)}%"></span>`:''}${c.gris?`<span class="seg gris" style="width:${pct(c.gris)}%"></span>`:''}
+          </div>
+          <span class="dash-carga-avg">${c.avgAvance}% prom.</span>
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
 
 /* ---------------- Navigation ---------------- */
 const SECTIONS = [
@@ -1243,17 +1286,17 @@ function viewGuia(){
     <div class="guide-section" id="g-pestanas">
       <h2>🗂️ 3. Qué hay en cada pestaña</h2>
       <ul class="guide-list">
-        <li><b>📊 Panel general</b> — el resumen visual: actividades retrasadas o próximas a vencer, gráficas de avance (proyectos, actividades, y su tendencia en el tiempo), y la carga de trabajo de tu equipo.</li>
+        <li><b>📊 Panel general</b> — el resumen visual: actividades retrasadas o próximas a vencer, gráficas de avance (proyectos, actividades, y su tendencia en el tiempo), y la carga de trabajo de tu equipo, vista de dos formas: por responsable (persona) y por área responsable.</li>
         <li><b>🧭 Mi TOC</b> — la Teoría de Cambio de tu organización: nombre de la organización, visión, misión, objetivos generales y sus objetivos específicos. Es el punto de partida del que se desprende todo lo demás.</li>
         <li><b>🗂️ Proyectos</b> — la lista de tus proyectos, con su objetivo específico, responsable, financiamiento, fechas, sus resultados y ambos semáforos (de ejecución y de indicadores).</li>
         <li><b>✅ Actividades</b> — el detalle operativo del día a día, con fechas, responsable, % de avance, estado y semáforo.</li>
         <li><b>👥 Responsables</b> — tu equipo: nombre, rol, área, organización y contacto.</li>
-        <li><b>📝 Formatos</b> — descarga formatos en Word para que las áreas o responsables reporten sus avances en papel: por proyecto completo, por área, o por responsable. Los datos que ya se conocen vienen impresos; tú solo transcribes lo que te devuelvan.</li>
+        <li><b>📝 Formatos</b> — descarga formatos en Word. Los de <b>seguimiento</b> (por proyecto completo, por área o por responsable) traen impreso lo que ya se sabe para que quien reporta solo llene los avances. Los de <b>alta</b> (proyecto nuevo / actividad nueva) son hojas en blanco con todos los campos necesarios, para que un área o responsable proponga algo nuevo en papel y tú luego lo captures en la app.</li>
         <li><b>📘 Guía de uso</b> — esta misma página.</li>
         <li><b>📖 Glosario</b> — si te encuentras con un término que no conoces (TOC, línea base, etc.), lo explicamos ahí en palabras simples.</li>
         <li><b>ℹ️ Acerca de</b> — quién desarrolló MetaTrace y cómo se maneja tu información (aviso de privacidad).</li>
       </ul>
-      <div class="guide-tip">💡 En el Panel general casi todo es clicable: una actividad retrasada o próxima a vencer, o una fila de carga de trabajo te llevan directo a esa información, sin tener que buscarla manualmente.</div>
+      <div class="guide-tip">💡 En el Panel general casi todo es clicable: una actividad retrasada o próxima a vencer, o una fila de carga de trabajo (por responsable o por área) te llevan directo a la lista de Actividades ya filtrada, sin tener que buscarla manualmente.</div>
     </div>
 
     <div class="guide-section" id="g-semaforos">
@@ -1286,7 +1329,7 @@ function viewGuia(){
     <div class="guide-section" id="g-buscar">
       <h2>🔍 7. Buscar, filtrar y ordenar</h2>
       <p>Todas las tablas (Proyectos, Actividades, Responsables) tienen un buscador arriba — escribe cualquier palabra y filtra en tiempo real, sin distinguir mayúsculas ni tildes.</p>
-      <p>En Proyectos y Actividades, además del buscador hay una fila de <b>desplegables para filtrar por columna</b> (objetivo, financiamiento, semáforo, responsable, estado, etc.) — cada uno lista los valores que ya tienes cargados. Puedes combinar varios filtros a la vez con el buscador, muy útil cuando la lista ya es larga. El botón "✕ Limpiar filtros", junto al buscador, aparece en cuanto hay una búsqueda escrita o algún filtro activo, y limpia los dos de un solo clic.</p>
+      <p>En Proyectos y Actividades, además del buscador hay una fila de <b>desplegables para filtrar por columna</b> — cada uno lista los valores que ya tienes cargados. En Proyectos puedes filtrar por el proyecto en concreto, el objetivo general o específico, el financiamiento y los semáforos; en Actividades, por la actividad en concreto, el proyecto, el resultado, el área, el responsable, el estado y el semáforo. Puedes combinar varios filtros a la vez con el buscador, muy útil cuando la lista ya es larga. El botón "✕ Limpiar filtros", junto al buscador, aparece en cuanto hay una búsqueda escrita o algún filtro activo, y limpia todo de un solo clic.</p>
       <p>Además, puedes hacer clic en el <b>encabezado de cualquier columna</b> para ordenar por ese dato — un clic ordena de menor a mayor, otro clic invierte el orden. Muy útil, por ejemplo, para ordenar Actividades por fecha o por % de avance.</p>
     </div>
 
@@ -1350,6 +1393,8 @@ const GLOSARIO_TERMINOS = [
   { t:'Semáforo de proyecto', d:'Un color que resume si los indicadores de los resultados de un proyecto (o de un objetivo) ya alcanzaron su meta: verde (meta alcanzada), amarillo (en proceso) o gris (sin datos aún). A diferencia del semáforo de actividades, mide si el cambio realmente está ocurriendo, no si se hizo el trabajo.' },
   { t:'Histórico de avance', d:'El registro fechado de cada actualización de avance que se ha hecho, tanto de actividades como de indicadores. Permite ver la evolución en el tiempo (ej. "en mayo íbamos al 30%, en junio al 40%") en vez de solo el dato más reciente.' },
   { t:'Área responsable', d:'El área o programa interno de tu organización a cargo de una actividad (ej. "Educación", "Salud", "Incidencia"), distinto del "Responsable", que es la persona específica encargada.' },
+  { t:'Carga de trabajo', d:'En el Panel general, el resumen de cuántas actividades tiene encima cada responsable (persona) y cada área, con su mezcla de semáforos y su % de avance promedio. Sirve para ver de un vistazo quién o qué área está saturada o con muchos pendientes retrasados. Cada fila lleva directo a la lista de Actividades ya filtrada por ese responsable o esa área.' },
+  { t:'Formato de alta', d:'Una hoja en blanco descargable en Word (desde la pestaña Formatos) con todos los campos necesarios para proponer un proyecto nuevo o una actividad nueva. La llena a mano quien lo propone y el equipo MEL la usa para capturar el nuevo registro en la app. Se distingue de los formatos de seguimiento, que sirven para reportar avances de lo que ya existe.' },
   { t:'Financiamiento / Origen del presupuesto', d:'De dónde viene el dinero que financia un proyecto: cooperación internacional, fondos propios, una alianza público-privada, etc. Útil para informes de rendición de cuentas.' },
   { t:'Respaldo (.json)', d:'Una copia completa de toda la información de MetaTrace que puedes descargar y guardar. Como los datos viven solo en este dispositivo, exportar el respaldo con frecuencia es la única forma de no perderlos si cambias de computador o reinstalas este dispositivo.' },
   { t:'Aviso de nueva versión disponible', d:'Un mensaje que aparece al abrir MetaTrace instalada como app de escritorio, si existe una versión más nueva publicada. Solo consulta cuál es el número de versión más reciente — nunca envía tus datos — y no instala nada de forma automática: tú decides si ir a la página de descarga o seguir con la versión actual.' },
@@ -1519,8 +1564,16 @@ function viewDashboard(){
     </div>
 
     <div class="section-block">
-      <h2>Carga de trabajo por responsable</h2>
-      ${renderCargaResponsablesHtml(calcularCargaResponsables())}
+      <div class="dash-carga-cols">
+        <div>
+          <h2>Carga de trabajo por responsable</h2>
+          ${renderCargaResponsablesHtml(calcularCargaResponsables())}
+        </div>
+        <div>
+          <h2>Carga de trabajo por área</h2>
+          ${renderCargaAreasHtml(calcularCargaAreas())}
+        </div>
+      </div>
     </div>
   `;
 }
@@ -1720,6 +1773,7 @@ function viewProyectos(){
   const searchFn = p => [p.nombre, p.descripcion, nombreResponsableProyecto(p), p.donante, nombreObjEsp(p), nombreObjGen(p)].join(' ');
 
   const filterGetters = {
+    id: p => p.id || '',
     objetivoGeneralId: p => { const e = objEspMap[p.objetivoEspecificoId]; return e ? e.objetivoGeneralId : ''; },
     objetivoEspecificoId: p => p.objetivoEspecificoId || '',
     donante: p => p.donante || '',
@@ -1727,6 +1781,7 @@ function viewProyectos(){
     semaforoIndicadoresCode: p => calcularSemaforoIndicadoresProyecto(p.id).code
   };
   const filtrosConfig = [
+    { key:'id', label:'Proyecto', opciones: Store.data.proyectos.slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es')).map(p=>({ value:p.id, label:p.nombre })) },
     { key:'objetivoGeneralId', label:'Objetivo general', opciones: Store.data.objetivosGenerales.map(g=>({ value:g.id, label:`${numeroObjetivoGeneral(g.id)} — ${g.nombre}` })) },
     { key:'objetivoEspecificoId', label:'Objetivo específico', opciones: Store.data.objetivosEspecificos.map(e=>({ value:e.id, label:`${numeroObjetivoEspecifico(e.id)} — ${e.nombre}` })) },
     { key:'donante', label:'Financiamiento', opciones: Array.from(new Set(Store.data.proyectos.map(p=>p.donante).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'es')).map(v=>({value:v,label:v})) },
@@ -2077,6 +2132,7 @@ function viewActividades(){
   const searchFn = a => [a.nombre, proyectosMap[a.proyectoId]?.nombre, nombreResultado(a), a.areaResponsable, respMap[a.responsableId], a.productoFinal, a.notas, a.ajustes, a.comentariosSeguimiento].join(' ');
 
   const filterGetters = {
+    id: a => a.id || '',
     proyectoId: a => a.proyectoId || '',
     resultadoId: a => a.resultadoId || '',
     areaResponsable: a => a.areaResponsable || '',
@@ -2085,6 +2141,7 @@ function viewActividades(){
     semaforoCode: a => calcularSemaforo(a).code
   };
   const filtrosConfig = [
+    { key:'id', label:'Actividad', opciones: Store.data.actividades.slice().sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es')).map(a=>({value:a.id, label:a.nombre})) },
     { key:'proyectoId', label:'Proyecto', opciones: Store.data.proyectos.map(p=>({value:p.id, label:p.nombre})) },
     { key:'resultadoId', label:'Resultado', opciones: Store.data.proyectos.flatMap(p=>(p.resultados||[]).map(r=>({value:r.id, label:`${r.nombre} (${p.nombre})`}))) },
     { key:'areaResponsable', label:'Área responsable', opciones: Array.from(new Set(Store.data.actividades.map(a=>a.areaResponsable).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'es')).map(v=>({value:v,label:v})) },
@@ -2456,6 +2513,9 @@ function viewFormatos(){
   const areasDisp = Array.from(new Set(Store.data.actividades.map(a=>a.areaResponsable).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'es'));
   const responsablesDisp = Store.data.responsables;
 
+  // Los formatos "en blanco" (alta de proyecto / alta de actividad) no dependen de un dato ya existente.
+  const esEnBlanco = (tipo === 'nuevo-proyecto' || tipo === 'nueva-actividad');
+
   const config = {
     proyecto: {
       label: 'Proyecto',
@@ -2472,48 +2532,59 @@ function viewFormatos(){
       opciones: responsablesDisp.length ? responsablesDisp.map(r=>`<option value="${r.id}">${esc(r.nombre)}</option>`).join('') : `<option value="">Aún no tienes responsables</option>`,
       hayDatos: responsablesDisp.length > 0,
     },
-  }[tipo];
+  }[tipo] || { label:'', opciones:'', hayDatos:true };
 
   const hayAlgunDato = proyectosDisp.length || areasDisp.length || responsablesDisp.length;
+
+  const hints = {
+    proyecto: 'Organizado por Resultado, con sus actividades e indicadores — ideal para un corte semestral o anual de todo el proyecto.',
+    area: 'Junta las actividades de esa área aunque pertenezcan a proyectos distintos, agrupadas por proyecto.',
+    responsable: 'Junta las actividades de esa persona aunque pertenezcan a proyectos distintos, agrupadas por proyecto.',
+    'nuevo-proyecto': 'Hoja en blanco con todos los campos necesarios para dar de alta un proyecto nuevo (con sus resultados e indicadores). El área o responsable la llena a mano y te la devuelve para que tú la captures en la app.',
+    'nueva-actividad': 'Hoja en blanco con todos los campos necesarios para dar de alta una actividad nueva. El área o responsable la llena a mano y te la devuelve para que tú la captures en la app.',
+  };
 
   return `
     <div class="page-head">
       <div>
         <h1>Formatos</h1>
-        <p>Genera formatos en Word para que las áreas o responsables reporten sus avances en papel, y tú los transcribas fácil dentro de MetaTrace.</p>
+        <p>Genera formatos en Word para que las áreas o responsables reporten sus avances (o propongan proyectos y actividades nuevas) en papel, y tú los transcribas fácil dentro de MetaTrace.</p>
       </div>
     </div>
-    ${!hayAlgunDato ? emptyState('Aún no hay nada que generar', 'Crea al menos un proyecto, una actividad con área, o un responsable para poder generar un formato.') : ''}
+    ${(!hayAlgunDato && !esEnBlanco) ? emptyState('Aún no hay nada que generar', 'Crea al menos un proyecto, una actividad con área, o un responsable para poder generar un formato de seguimiento. Los formatos de alta (proyecto / actividad nueva) sí puedes descargarlos desde ya.') : ''}
 
-    <div class="field" style="max-width:520px;">
+    <div class="field" style="max-width:560px;">
       <label>¿Qué quieres generar?</label>
       <select id="selFormatoTipo">
-        <option value="proyecto" ${tipo==='proyecto'?'selected':''}>Reporte general de un proyecto completo</option>
-        <option value="area" ${tipo==='area'?'selected':''}>Actividades de un área específica</option>
-        <option value="responsable" ${tipo==='responsable'?'selected':''}>Actividades de un responsable específico</option>
+        <optgroup label="Formatos de seguimiento (avances)">
+          <option value="proyecto" ${tipo==='proyecto'?'selected':''}>Reporte general de un proyecto completo</option>
+          <option value="area" ${tipo==='area'?'selected':''}>Actividades de un área específica</option>
+          <option value="responsable" ${tipo==='responsable'?'selected':''}>Actividades de un responsable específico</option>
+        </optgroup>
+        <optgroup label="Formatos de alta (dar de alta algo nuevo)">
+          <option value="nuevo-proyecto" ${tipo==='nuevo-proyecto'?'selected':''}>Hoja para proponer un proyecto nuevo</option>
+          <option value="nueva-actividad" ${tipo==='nueva-actividad'?'selected':''}>Hoja para proponer una actividad nueva</option>
+        </optgroup>
       </select>
-      <div class="field-hint">
-        ${tipo==='proyecto' ? 'Organizado por Resultado, con sus actividades e indicadores — ideal para un corte semestral o anual de todo el proyecto.' : ''}
-        ${tipo==='area' ? 'Junta las actividades de esa área aunque pertenezcan a proyectos distintos, agrupadas por proyecto.' : ''}
-        ${tipo==='responsable' ? 'Junta las actividades de esa persona aunque pertenezcan a proyectos distintos, agrupadas por proyecto.' : ''}
-      </div>
+      <div class="field-hint">${hints[tipo] || ''}</div>
     </div>
 
-    <div class="field" style="max-width:520px;">
+    ${ esEnBlanco ? '' : `
+    <div class="field" style="max-width:560px;">
       <label>${config.label}</label>
       <select id="selFormatoObjetivo">${config.opciones}</select>
     </div>
 
-    <div class="field" style="max-width:520px;">
+    <div class="field" style="max-width:560px;">
       <label class="checkbox-label">
         <input type="checkbox" id="chkFormatoIncluirCompletadas" ${formatoIncluirCompletadas?'checked':''}>
         Incluir actividades e indicadores ya completados
       </label>
       <div class="field-hint">Desmarcado (lo normal), el formato solo trae lo que todavía falta por reportar — así nadie tiene que volver a llenar algo que ya se cerró.</div>
-    </div>
+    </div>` }
 
     <button class="btn btn-accent" data-action="descargar-formato" ${config.hayDatos?'':'disabled'}>📝 Descargar formato (Word)</button>
-    <div class="field-hint" style="max-width:520px; margin-top:14px;">Se descarga como archivo <b>.doc</b> — Word lo abre, edita y guarda con normalidad, sin necesitar ningún programa especial. Los datos que ya se conocen vienen impresos, incluyendo el último valor registrado; solo quedan en blanco los que hay que llenar a mano.</div>
+    <div class="field-hint" style="max-width:560px; margin-top:14px;">Se descarga como archivo <b>.doc</b> — Word lo abre, edita y guarda con normalidad, sin necesitar ningún programa especial. ${ esEnBlanco ? 'Al pie viene un recuadro de firma y una nota para que quien lo llene te lo devuelva.' : 'Los datos que ya se conocen vienen impresos, incluyendo el último valor registrado; solo quedan en blanco los que hay que llenar a mano.' }</div>
   `;
 }
 
@@ -2844,6 +2915,9 @@ function handleAction(action, id, idx){
   }
   if(action==='descargar-formato'){
     const tipo = document.getElementById('selFormatoTipo')?.value;
+    // Formatos "en blanco": no dependen de ningún dato ya existente
+    if(tipo === 'nuevo-proyecto'){ descargarRTF(construirFormatoNuevoProyectoRTF(), 'Formato de alta - proyecto nuevo'); return; }
+    if(tipo === 'nueva-actividad'){ descargarRTF(construirFormatoNuevaActividadRTF(), 'Formato de alta - actividad nueva'); return; }
     const valor = document.getElementById('selFormatoObjetivo')?.value;
     const incluirCompletadas = !!document.getElementById('chkFormatoIncluirCompletadas')?.checked;
     formatoIncluirCompletadas = incluirCompletadas;
@@ -2865,8 +2939,14 @@ function handleAction(action, id, idx){
     return;
   }
   if(action==='ver-actividades-responsable'){
-    const resp = Store.get('responsables', id);
-    if(resp) tableState.actividades.search = resp.nombre;
+    tableState.actividades.search = '';
+    tableState.actividades.filtros = { responsableId: id };
+    currentSection='actividades'; renderNav(); renderView();
+    return;
+  }
+  if(action==='ver-actividades-area'){
+    tableState.actividades.search = '';
+    tableState.actividades.filtros = { areaResponsable: id };
     currentSection='actividades'; renderNav(); renderView();
     return;
   }
@@ -3984,6 +4064,130 @@ function construirFormatoResponsableRTF(responsableId, incluirCompletadas){
   if(!resp) return null;
   const todas = Store.data.actividades.filter(a=>a.responsableId===responsableId);
   return construirFormatoActividadesAgrupadasRTF('FORMATO DE SEGUIMIENTO POR RESPONSABLE', resp.nombre, 'Actividades asignadas a esta persona, en todos los proyectos', todas, incluirCompletadas);
+}
+
+/* ---------------- Formatos de ALTA (hojas en blanco para dar de alta algo nuevo) ---------------- */
+
+// Etiqueta de campo + renglón(es) en blanco para llenar a mano.
+function rtfCampoBlanco(label, opts){
+  opts = opts || {};
+  let out = rtfParagraph({text:label, bold:true, size:17, color:RTF_C.GRAYTXT}, {spaceBefore:opts.spaceBefore||60, spaceAfter:36});
+  if(opts.hint) out += rtfParagraph({text:opts.hint, italic:true, size:13, color:RTF_C.GRAYMUTED}, {spaceAfter:36});
+  const lineas = opts.lineas || 1;
+  for(let i=0;i<lineas;i++){
+    out += rtfParagraph({text:' '}, {spaceAfter: i===lineas-1 ? (opts.spaceAfter||140) : 150, borderBottom:{width:6,color:RTF_C.GRAYLINE}});
+  }
+  return out;
+}
+// Casillas ☐ como texto plano (una línea)
+function rtfCasillas(label, opciones, opts){
+  opts = opts || {};
+  const cajas = opciones.map(o=>'☐ ' + o).join('      ');
+  let out = rtfParagraph({text:label, bold:true, size:17, color:RTF_C.GRAYTXT}, {spaceBefore:opts.spaceBefore||60, spaceAfter:36});
+  out += rtfParagraph({text:cajas, size:18, color:RTF_C.DARK}, {spaceAfter:opts.spaceAfter||130});
+  return out;
+}
+// Catálogo de opciones ya existentes en la app, para que quien llena escriba el nombre/código exacto.
+function rtfCatalogo(label, items){
+  let out = rtfParagraph({text:label, bold:true, size:14, color:RTF_C.GRAYMUTED}, {spaceBefore:80, spaceAfter:36});
+  if(!items.length){
+    out += rtfParagraph({text:'(Aún no hay opciones registradas en la app — escribe el dato completo.)', italic:true, size:14, color:RTF_C.GRAYMUTED}, {spaceAfter:60});
+  } else {
+    items.forEach(it=>{ out += rtfParagraph({text:'•  ' + it, size:15, color:RTF_C.GRAYTXT}, {spaceAfter:18}); });
+  }
+  return out;
+}
+function construirPieAltaRTF(queHacer){
+  const sigW = Math.floor(RTF_CONTENT_W/3);
+  const sigWidths = [sigW, sigW, RTF_CONTENT_W-2*sigW];
+  let out = rtfParagraph({text:' '}, {spaceBefore:160, spaceAfter:160});
+  out += rtfTableRow(['Nombre de quien propone','Cargo / área','Fecha'].map(t=>({lines:[{text:t, size:15, color:RTF_C.GRAYTXT}]})), sigWidths, {borderColor:RTF_C.WHITE});
+  out += rtfTableRow([0,1,2].map(()=>({lines:[{text:' ', size:8}]})), sigWidths, {borderColor:RTF_C.GRAYLINE});
+  out += rtfParagraph({text:'MetaTrace — una app de Colectivo META (COMETA)', size:14, color:RTF_C.FOOTNOTE}, {spaceBefore:200, spaceAfter:20, align:'center'});
+  out += rtfParagraph({text:queHacer, size:14, color:RTF_C.FOOTNOTE}, {spaceAfter:0, align:'center'});
+  return out;
+}
+
+function construirFormatoNuevoProyectoRTF(){
+  const objEspItems = Store.data.objetivosEspecificos.map(e=>{
+    const cg = numeroObjetivoGeneral(e.objetivoGeneralId);
+    return `${numeroObjetivoEspecifico(e.id)}${cg?` (de ${cg})`:''} — ${e.nombre}`;
+  });
+  const respItems = Store.data.responsables.map(r=>`${r.nombre}${r.rol?` — ${r.rol}`:''}${r.area?` · ${r.area}`:''}`);
+
+  let b = '';
+  b += rtfParagraph({text:'FORMATO DE ALTA — PROYECTO NUEVO', bold:true, size:15, color:RTF_C.GOLD}, {spaceAfter:40});
+  b += rtfParagraph({text:'Propuesta de proyecto nuevo', bold:true, size:34, color:RTF_C.DARK}, {spaceAfter:60});
+  b += rtfParagraph({text:'Llena esta hoja a mano y entrégala al equipo MEL para que dé de alta el proyecto en MetaTrace. Todo proyecto se cuelga de un objetivo específico de la Teoría de Cambio y trae al menos un resultado con su(s) indicador(es).', size:16, color:RTF_C.GRAYMUTED}, {spaceAfter:180, borderBottom:{width:20,color:RTF_C.TEAL}});
+
+  b += rtfParagraph({text:'1. DATOS GENERALES DEL PROYECTO', bold:true, size:16, color:RTF_C.TEAL}, {spaceBefore:40, spaceAfter:70});
+  b += rtfCampoBlanco('Nombre del proyecto');
+  b += rtfCatalogo('Objetivo específico al que pertenece — copia el código (ej. OE1.2):', objEspItems);
+  b += rtfCampoBlanco('Código del objetivo específico elegido');
+  b += rtfCampoBlanco('Descripción (alcance, población objetivo, cobertura geográfica)', {lineas:3});
+  b += rtfCatalogo('Responsable general — elígelo de la lista, o escribe un nombre nuevo:', respItems);
+  b += rtfCampoBlanco('Responsable general del proyecto');
+  b += rtfCampoBlanco('Financiamiento / origen del presupuesto', {hint:'Ej. cooperación internacional, fondos propios, alianza público-privada...'});
+  b += rtfCampoBlanco('Fecha de inicio (dd/mm/aaaa)');
+  b += rtfCampoBlanco('Fecha de fin (dd/mm/aaaa)');
+
+  b += rtfParagraph({text:'2. RESULTADOS ESPERADOS', bold:true, size:16, color:RTF_C.TEAL}, {spaceBefore:160, spaceAfter:40});
+  b += rtfParagraph({text:'Se necesita al menos 1 resultado. Si el proyecto tiene más de 2, fotocopia esta hoja o continúa al reverso con el mismo formato.', italic:true, size:14, color:RTF_C.GRAYMUTED}, {spaceAfter:90});
+
+  for(let R=1; R<=2; R++){
+    b += rtfTableRow([{shade:RTF_C.PURPLE, lines:[{text:`  RESULTADO ${R}${R===1?' (obligatorio)':' (opcional)'}  `, size:14, bold:true, color:RTF_C.WHITE}]}], [RTF_CONTENT_W], {borderColor:RTF_C.PURPLE});
+    b += rtfCampoBlanco('Nombre del resultado esperado', {spaceBefore:70});
+    b += rtfCampoBlanco('Estrategias institucionales clave', {lineas:2});
+    b += rtfCampoBlanco('Actores clave', {lineas:2});
+    for(let I=1; I<=2; I++){
+      b += rtfParagraph({text:`Indicador ${R}.${I}${I===1?' (obligatorio)':' (opcional)'}`, bold:true, size:15, color:RTF_C.GRAYMUTED}, {spaceBefore:90, spaceAfter:40});
+      b += rtfCampoBlanco('Nombre del indicador');
+      b += rtfCasillas('Tipo de indicador:', ['Cuantitativo (números: línea base, meta, valor actual)', 'Cualitativo (escala: No cumplido / Parcial / Cumplido)']);
+      b += rtfCampoBlanco('Si es CUANTITATIVO — Línea base / Meta / Valor actual / Unidad', {hint:'Ej. Línea base 0 · Meta 120 · Valor actual 30 · Unidad: familias'});
+      b += rtfCasillas('Si es CUALITATIVO — nivel actual:', ['No cumplido', 'Parcialmente cumplido', 'Cumplido']);
+    }
+  }
+
+  b += construirPieAltaRTF('Entrega esta hoja al equipo MEL para dar de alta el proyecto en "Proyectos" dentro de la app.');
+  return rtfDoc(b);
+}
+
+function construirFormatoNuevaActividadRTF(){
+  const proyItems = Store.data.proyectos.map(p=>p.nombre);
+  const areaItems = Array.from(new Set(Store.data.actividades.map(a=>a.areaResponsable).filter(Boolean)))
+    .concat(Store.data.responsables.map(r=>r.area).filter(Boolean));
+  const areasUnicas = Array.from(new Set(areaItems)).sort((a,b)=>a.localeCompare(b,'es'));
+  const respItems = Store.data.responsables.map(r=>`${r.nombre}${r.rol?` — ${r.rol}`:''}`);
+
+  let b = '';
+  b += rtfParagraph({text:'FORMATO DE ALTA — ACTIVIDAD NUEVA', bold:true, size:15, color:RTF_C.GOLD}, {spaceAfter:40});
+  b += rtfParagraph({text:'Propuesta de actividad nueva', bold:true, size:34, color:RTF_C.DARK}, {spaceAfter:60});
+  b += rtfParagraph({text:'Llena esta hoja a mano y entrégala al equipo MEL para que dé de alta la actividad en MetaTrace. Toda actividad pertenece a un proyecto y, si aplica, a un resultado de ese proyecto.', size:16, color:RTF_C.GRAYMUTED}, {spaceAfter:180, borderBottom:{width:20,color:RTF_C.TEAL}});
+
+  b += rtfCampoBlanco('Nombre de la actividad', {hint:'Ej. Taller de formación en incidencia'});
+  b += rtfCatalogo('Proyecto al que pertenece — elígelo de la lista:', proyItems);
+  b += rtfCampoBlanco('Proyecto elegido');
+  b += rtfCampoBlanco('Resultado al que se vincula (opcional)', {hint:'Debe ser un resultado del proyecto elegido; si no aplica, deja en blanco.'});
+  b += rtfCatalogo('Área responsable — elígela de la lista, o escribe una nueva:', areasUnicas);
+  b += rtfCampoBlanco('Área responsable');
+  b += rtfCatalogo('Responsable (persona) — elígelo de la lista, o escribe un nombre nuevo:', respItems);
+  b += rtfCampoBlanco('Responsable');
+  b += rtfCampoBlanco('Fecha de inicio (dd/mm/aaaa)');
+  b += rtfCampoBlanco('Fecha de fin / plazo comprometido (dd/mm/aaaa)');
+
+  b += rtfParagraph({text:'AVANCE Y SEGUIMIENTO', bold:true, size:16, color:RTF_C.TEAL}, {spaceBefore:150, spaceAfter:60});
+  b += rtfCasillas('¿Cómo se mide el avance?', ['Porcentaje directo (0–100%)', 'Meta (ej. 30 de 100 escuelas)']);
+  b += rtfCampoBlanco('Si es PORCENTAJE — % de avance actual');
+  b += rtfCampoBlanco('Si es META — "va ___ de ___" y unidad', {hint:'Ej. va 30 de 100 · unidad: escuelas'});
+  b += rtfCasillas('Estado de la actividad:', ['Pendiente', 'Terminado']);
+  b += rtfCampoBlanco('Fecha de cumplimiento real (solo si ya terminó)');
+  b += rtfCampoBlanco('Producto final / entregable', {lineas:2});
+  b += rtfCampoBlanco('Ajustes respecto a lo planeado (opcional)', {lineas:2});
+  b += rtfCampoBlanco('Notas (opcional)', {lineas:2});
+  b += rtfCampoBlanco('Comentarios al seguimiento (opcional)', {lineas:2});
+
+  b += construirPieAltaRTF('Entrega esta hoja al equipo MEL para dar de alta la actividad en "Actividades" dentro de la app.');
+  return rtfDoc(b);
 }
 
 function descargarBlob(blob, filename){
