@@ -350,6 +350,12 @@
   .papelera-acciones{ display:flex; gap:6px; align-items:center; }
   .lote-input{ padding:6px 8px; border:1px solid var(--color-border); border-radius:6px; font-size:12.5px; font-family:inherit; background: var(--color-surface-alt); color: var(--color-text); }
   .lote-input:focus{ outline:none; border-color: var(--color-secondary); }
+  .estado-badge{ display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; white-space:nowrap; border:1px solid transparent; }
+  .estado-planeada{ background: var(--color-primary-soft); color: var(--color-text-soft); }
+  .estado-en_curso{ background:#E7EEF6; color:#2B5378; }
+  .estado-en_pausa{ background:#FAF0D8; color:#85610E; }
+  .estado-terminada{ background:#E5F2EA; color:#245C3C; }
+  .estado-cancelada{ background:#F1EEEC; color:#7A7A7A; text-decoration:line-through; }
   .range-row{ display:flex; align-items:center; gap:12px; }
   .range-row input[type=range]{ flex:1; }
   .range-val{ font-family: var(--font-display); font-weight:700; color: var(--color-primary); font-size:14px; width:46px; text-align:right; }
@@ -708,6 +714,27 @@ function safeLSSet(key, value){
   try { localStorage.setItem(key, value); return true; } catch(e){ return false; }
 }
 
+/* ---------------- Estado de la actividad (ciclo de vida, lo decide la persona) ----------------
+   Distinto del semáforo, que es el indicador de salud automático (avance + fechas). */
+const ESTADO_ACT_DEFS = {
+  planeada:  { label:'Planeada' },
+  en_curso:  { label:'En curso' },
+  en_pausa:  { label:'En pausa' },
+  terminada: { label:'Terminada' },
+  cancelada: { label:'Cancelada' },
+};
+const ESTADO_ACT_ORDEN = ['planeada','en_curso','en_pausa','terminada','cancelada'];
+function etiquetaEstadoActividad(e){ return (ESTADO_ACT_DEFS[e] || ESTADO_ACT_DEFS.planeada).label; }
+// "Cerrada" = ya no está en juego para reportar avances (terminada o cancelada).
+function esActividadCerrada(a){ return a && (a.estado === 'terminada' || a.estado === 'cancelada'); }
+// Migración del modelo antiguo (pendiente/terminado). Idempotente: si ya es un estado nuevo, no lo toca.
+function migrarEstadoActividad(estado, avance){
+  if(estado === 'terminado' || estado === 'terminada') return 'terminada';
+  if(ESTADO_ACT_DEFS[estado]) return estado;
+  const av = Number(avance) || 0;
+  return av >= 100 ? 'terminada' : (av > 0 ? 'en_curso' : 'planeada');
+}
+
 /* ---------------- Store ---------------- */
 const Store = {
   data: { perfil:{nombreOrganizacion:'',vision:'',mision:''}, objetivosGenerales: [], objetivosEspecificos: [], proyectos: [], actividades: [], responsables: [] },
@@ -720,6 +747,8 @@ const Store = {
       if(!Array.isArray(this.data[k])) this.data[k] = [];
     });
     if(!this.data.perfil || typeof this.data.perfil !== 'object') this.data.perfil = { nombreOrganizacion:'', vision:'', mision:'' };
+    // Estado de actividad: modelo antiguo (pendiente/terminado) -> ciclo de vida. Idempotente.
+    this.data.actividades.forEach(a => { a.estado = migrarEstadoActividad(a.estado, Number(a.avance) || 0); });
     // Papelera: tolera ausencia y purga lo de más de 30 días
     if(!Array.isArray(this.data._papelera)) this.data._papelera = [];
     else {
@@ -804,6 +833,9 @@ function calcularSemaforo(act){
   // estadoManual solo cuenta si es uno de los códigos válidos (un respaldo editado a mano
   // podría traer un valor raro; en ese caso lo ignoramos y calculamos automáticamente).
   if(act.estadoManual && SEMAFORO_DEFS[act.estadoManual]) return SEMAFORO_DEFS[act.estadoManual];
+  // El ciclo de vida manda sobre el cálculo automático en los extremos:
+  if(act.estado === 'terminada') return SEMAFORO_DEFS.verde;
+  if(act.estado === 'cancelada' || act.estado === 'en_pausa') return SEMAFORO_DEFS.gris;
   const avance = Number(act.avance) || 0;
   const hoy = todayISO();
   if(avance >= 100) return SEMAFORO_DEFS.verde;
@@ -834,7 +866,7 @@ function chipTOC(sem, tipo){
 
 // Semáforo de actividades agregado a nivel de proyecto, según el semáforo de sus actividades
 function calcularSemaforoProyecto(proyectoId){
-  const acts = Store.data.actividades.filter(a=>a.proyectoId===proyectoId);
+  const acts = Store.data.actividades.filter(a=>a.proyectoId===proyectoId && a.estado!=='cancelada');
   if(!acts.length) return SEMAFORO_DEFS.gris;
   const sems = acts.map(a=>calcularSemaforo(a).code);
   if(sems.includes('rojo')) return SEMAFORO_DEFS.rojo;
@@ -1052,7 +1084,8 @@ function rerenderPreservingFocus(){
 }
 
 function calcularAvancePromedio(proyectoId){
-  const acts = Store.data.actividades.filter(a=>a.proyectoId===proyectoId);
+  // Las actividades canceladas no cuentan para el avance del proyecto.
+  const acts = Store.data.actividades.filter(a=>a.proyectoId===proyectoId && a.estado!=='cancelada');
   if(!acts.length) return 0;
   return Math.round(acts.reduce((s,a)=>s+(Number(a.avance)||0),0) / acts.length);
 }
@@ -1163,6 +1196,7 @@ const MESES_ABREV = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct'
 function construirTendenciaAvanceMensual(){
   const porMes = {};
   Store.data.actividades.forEach(a=>{
+    if(a.estado === 'cancelada') return;
     (Array.isArray(a.historial) ? a.historial : []).forEach(h=>{
       if(!h.fecha || h.avance===null || h.avance===undefined) return;
       const mes = h.fecha.slice(0,7); // 'YYYY-MM'
@@ -1199,7 +1233,7 @@ function chartCardTendencia(puntos){
 function calcularCargaResponsables(){
   const porResponsable = {};
   Store.data.actividades.forEach(a=>{
-    if(!a.responsableId) return;
+    if(!a.responsableId || a.estado === 'cancelada') return;
     if(!porResponsable[a.responsableId]) porResponsable[a.responsableId] = { verde:0, amarillo:0, rojo:0, gris:0, total:0, sumaAvance:0 };
     const b = porResponsable[a.responsableId];
     b[calcularSemaforo(a).code]++;
@@ -1240,7 +1274,7 @@ function calcularCargaAreas(){
   const porArea = {};
   Store.data.actividades.forEach(a=>{
     const area = (a.areaResponsable || '').trim();
-    if(!area) return;
+    if(!area || a.estado === 'cancelada') return;
     if(!porArea[area]) porArea[area] = { verde:0, amarillo:0, rojo:0, gris:0, total:0, sumaAvance:0 };
     const b = porArea[area];
     b[calcularSemaforo(a).code]++;
@@ -1419,7 +1453,7 @@ function viewGuia(){
       <p>No tienes que editar el proyecto o la actividad completa cada vez que quieras actualizar un dato. Usa el botón <b>"📈 Registrar avance"</b> — aparece directamente en la lista de Actividades, y también en la lista de Proyectos (si el proyecto tiene varios indicadores entre todos sus resultados, primero te pregunta a cuál le vas a registrar el avance). Ahí eliges la fecha, el nuevo valor, una nota opcional y quién lo está registrando.</p>
       <p>Cada registro queda guardado en un histórico fechado, así que con el tiempo puedes ver la evolución completa (ej. "en mayo íbamos al 30%, en agosto al 55%") y no solo el dato más reciente. Con esos registros, el Panel general arma además una gráfica de tendencia de avance mes a mes, y el botón "📅 Avance por periodo" calcula cuánto cambió cada actividad entre dos fechas.</p>
       <p>Si tienes que capturar muchos avances de una vez (por ejemplo, lo que un área te devolvió en papel), usa <b>"📋 Registrar avances en lote"</b> en la pestaña Actividades: eliges el proyecto, área o responsable, y llenas una sola tabla con los valores nuevos.</p>
-      <div class="guide-tip">💡 El % de avance de una actividad y su Estado (Pendiente/Terminado) están sincronizados: si llega al 100% se marca Terminado solo, y si baja de 100% vuelve a Pendiente — no necesitas actualizar los dos por separado.</div>
+      <div class="guide-tip">💡 <b>"Estado" y "Semáforo" no son lo mismo.</b> El <b>Estado</b> es el ciclo de vida que tú decides: Planeada / En curso / En pausa / Terminada / Cancelada. El <b>Semáforo</b> se calcula solo con el avance y las fechas (verde/amarillo/rojo/gris). Marcar "Terminada" pone el avance en 100% y viceversa, pero "En pausa" y "Cancelada" nunca cambian solas — y las canceladas dejan de contar en las gráficas y en el avance del proyecto (ya no aparecen como retrasadas para siempre).</div>
     </div>
 
     <div class="guide-section" id="g-buscar">
@@ -1486,7 +1520,8 @@ const GLOSARIO_TERMINOS = [
   { t:'Actividad', d:'Una acción concreta que tu organización ejecuta (un taller, una entrega, una jornada) con fechas de inicio y fin, un responsable y un % de avance. Las actividades son el "cómo" del día a día; los resultados son el "para qué".' },
   { t:'Producto final', d:'El entregable tangible que deja una actividad específica al terminar (ej. "manual publicado", "informe de la jornada").' },
   { t:'Avance de ejecución', d:'Qué tanto de una actividad ya se hizo, medido en % — ya sea escribiéndolo directamente o calculándolo a partir de una meta (ej. "30 de 100 escuelas visitadas"). Responde a la pregunta "¿estamos haciendo lo que dijimos?".' },
-  { t:'Estado de la actividad', d:'Una marca de Pendiente o Terminado, sincronizada automáticamente con el % de avance: al llegar a 100% se marca Terminado, y si el avance baja de 100% vuelve a Pendiente. Es distinta del semáforo, que además considera las fechas comprometidas.' },
+  { t:'Estado de la actividad', d:'El punto del ciclo de vida en que está la actividad, que tú eliges a mano: Planeada, En curso, En pausa, Terminada o Cancelada. Marcar "Terminada" pone el avance en 100%, y llegar a 100% la marca "Terminada" sola; "En pausa" y "Cancelada" no cambian solas. Es distinto del semáforo, que se calcula solo según el avance y las fechas. Las actividades canceladas no cuentan en las gráficas ni en el avance del proyecto.' },
+  { t:'Semáforo de la actividad', d:'Un color que resume la salud de la actividad, calculado automáticamente: verde (ejecutada / al 100%), amarillo (en proceso), rojo (con la fecha de fin vencida sin llegar al 100%), gris (aún no empieza, o está en pausa o cancelada). No lo eliges tú — para eso está el "Estado". Puedes forzarlo manualmente si el cálculo no refleja la realidad del terreno.' },
   { t:'Fecha de cumplimiento', d:'La fecha real en que se terminó una actividad — puede ser distinta a la "fecha de fin" que se había comprometido originalmente.' },
   { t:'Ajustes a la actividad original', d:'Un espacio para anotar qué cambió respecto a lo planeado inicialmente (ej. "se redujo de 5 a 3 estados por motivos de seguridad").' },
   { t:'Notas', d:'Texto libre para observaciones generales de una actividad — riesgos, evidencias, contexto. Se solapa un poco con "Comentarios al seguimiento"; puedes usar el que te resulte más natural.' },
@@ -1636,6 +1671,7 @@ function filasPeriodo(desde, hasta){
   const anteriorADesde = (()=>{ const d = new Date(desde + 'T00:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
   const filas = [];
   Store.data.actividades.forEach(a=>{
+    if(a.estado === 'cancelada') return;
     const hist = Array.isArray(a.historial) ? a.historial : [];
     const registros = hist.filter(e => e && e.fecha && e.fecha >= desde && e.fecha <= hasta).length;
     const inicio = avanceActividadAFecha(a, anteriorADesde);
@@ -1740,8 +1776,8 @@ function resumenProyectoTexto(p){
   L.push('', 'ACTIVIDADES (' + acts.length + ')');
   if(!acts.length) L.push('  (sin actividades registradas)');
   acts.forEach(a=>{
-    const sem = calcularSemaforo(a).label;
-    L.push('- ' + (a.nombre || '(sin nombre)') + ' — ' + sem + ' · ' + (Number(a.avance)||0) + '%'
+    L.push('- ' + (a.nombre || '(sin nombre)') + ' — ' + etiquetaEstadoActividad(a.estado)
+      + ' · ' + (Number(a.avance)||0) + '% · semáforo ' + calcularSemaforo(a).label
       + (a.fechaFin ? ' · vence ' + fmtDate(a.fechaFin) : ''));
   });
   L.push('', 'Generado con MetaTrace el ' + fmtDate(todayISO()));
@@ -1761,13 +1797,13 @@ function loteActividades(){
   if(_loteTipo === 'proyecto') acts = acts.filter(a=>a.proyectoId === _loteValor);
   else if(_loteTipo === 'area') acts = acts.filter(a=>(a.areaResponsable||'') === _loteValor);
   else if(_loteTipo === 'responsable') acts = acts.filter(a=>a.responsableId === _loteValor);
-  if(!_loteIncluirTerm) acts = acts.filter(a=>a.estado !== 'terminado');
+  if(!_loteIncluirTerm) acts = acts.filter(a=>!esActividadCerrada(a));
   return acts;
 }
 function renderLoteTabla(){
   if(!_loteValor) return `<p class="chart-empty">Elige ${_loteTipo === 'area' ? 'un área' : (_loteTipo === 'responsable' ? 'un responsable' : 'un proyecto')} arriba.</p>`;
   const acts = loteActividades();
-  if(!acts.length) return `<p class="chart-empty">No hay actividades ${_loteIncluirTerm ? '' : 'pendientes '}en esa selección.</p>`;
+  if(!acts.length) return `<p class="chart-empty">No hay actividades ${_loteIncluirTerm ? '' : 'abiertas '}en esa selección.</p>`;
   return `
     <div class="table-wrap table-scroll" style="max-height:46vh; overflow-y:auto;">
       <table><thead><tr><th>Actividad</th><th>Va</th><th>Nuevo valor</th><th>Nota (opcional)</th></tr></thead><tbody>
@@ -1813,7 +1849,7 @@ function formAvancesLote(){
       <div><label>Fecha del registro</label><input type="date" id="loteFecha" value="${todayISO()}"></div>
       <div><label>Registrado por (opcional)</label><input type="text" id="loteRegistradoPor" value="${esc(ultimoReg)}" placeholder="Nombre"></div>
     </div>
-    <label class="checkbox-label" style="margin-bottom:6px;"><input type="checkbox" id="loteIncluirTerm" ${_loteIncluirTerm?'checked':''}> Incluir también las actividades ya terminadas</label>
+    <label class="checkbox-label" style="margin-bottom:6px;"><input type="checkbox" id="loteIncluirTerm" ${_loteIncluirTerm?'checked':''}> Incluir también las actividades terminadas o canceladas</label>
     <div id="loteTabla" style="margin-top:12px;">${renderLoteTabla()}</div>
     <div class="modal-actions">
       <button type="button" class="btn btn-text" data-action="close-modal">Cancelar</button>
@@ -1835,19 +1871,23 @@ function viewDashboard(){
   const proyectos = Store.data.proyectos;
   const generales = Store.data.objetivosGenerales;
 
+  // Las canceladas no cuentan en el pulso del panel (semáforos, gráficas, alertas).
+  const actsVigentes = acts.filter(a => a.estado !== 'cancelada');
+  const nCanceladas = acts.length - actsVigentes.length;
+
   const countsActividades = { verde:0, amarillo:0, rojo:0, gris:0 };
-  acts.forEach(a=>{ countsActividades[calcularSemaforo(a).code]++; });
+  actsVigentes.forEach(a=>{ countsActividades[calcularSemaforo(a).code]++; });
 
   const countsProyectos = { verde:0, amarillo:0, gris:0 };
   proyectos.forEach(p=>{ countsProyectos[calcularSemaforoIndicadoresProyecto(p.id).code]++; });
 
-  const actsSinResultado = acts.filter(a=>!a.resultadoId && !a.omitirAlertaResultado).length;
+  const actsSinResultado = actsVigentes.filter(a=>!a.resultadoId && !a.omitirAlertaResultado).length;
 
   const hoy = todayISO();
   const limiteProximo = (()=>{ const d = new Date(); d.setDate(d.getDate() + 15); return d.toISOString().slice(0,10); })();
-  const actsRetrasadas = acts.filter(a => calcularSemaforo(a).code === 'rojo')
+  const actsRetrasadas = actsVigentes.filter(a => calcularSemaforo(a).code === 'rojo')
     .sort((a,b)=>(a.fechaFin||'').localeCompare(b.fechaFin||''));
-  const actsProximasAVencer = acts.filter(a => a.fechaFin && a.fechaFin >= hoy && a.fechaFin <= limiteProximo && (Number(a.avance)||0) < 100)
+  const actsProximasAVencer = actsVigentes.filter(a => a.fechaFin && a.fechaFin >= hoy && a.fechaFin <= limiteProximo && (Number(a.avance)||0) < 100)
     .sort((a,b)=>(a.fechaFin||'').localeCompare(b.fechaFin||''));
 
   return `
@@ -1862,7 +1902,7 @@ function viewDashboard(){
     <div class="kpi-row">
       <div class="kpi-card"><div class="num">${generales.length}</div><div class="lbl">Objetivos generales</div></div>
       <div class="kpi-card"><div class="num">${proyectos.length}</div><div class="lbl">Proyectos</div></div>
-      <div class="kpi-card"><div class="num">${acts.length}</div><div class="lbl">Actividades totales</div></div>
+      <div class="kpi-card"><div class="num">${acts.length}</div><div class="lbl">Actividades totales${nCanceladas ? ` <span style="opacity:.65;">(${nCanceladas} cancelada${nCanceladas===1?'':'s'})</span>` : ''}</div></div>
       <div class="kpi-card verde"><div class="num">${countsActividades.verde}</div><div class="lbl">Ejecutadas</div></div>
       <div class="kpi-card amarillo"><div class="num">${countsActividades.amarillo}</div><div class="lbl">En proceso</div></div>
       <div class="kpi-card rojo"><div class="num">${countsActividades.rojo}</div><div class="lbl">Retrasadas</div></div>
@@ -2458,7 +2498,13 @@ function aplicarAvanceActividad(act, datos){
     entry.avance = Math.min(100, Math.max(0, Number(datos.avance)||0));
   }
   act.avance = entry.avance;
-  act.estado = act.avance >= 100 ? 'terminado' : 'pendiente';
+  // Sincronizar el ciclo de vida con el avance, SIN pisar una decisión humana (pausa/cancelada):
+  if(act.estado !== 'en_pausa' && act.estado !== 'cancelada'){
+    if(act.avance >= 100) act.estado = 'terminada';
+    else if(act.estado === 'terminada') act.estado = 'en_curso';
+    else if(act.avance > 0 && (act.estado === 'planeada' || !ESTADO_ACT_DEFS[act.estado])) act.estado = 'en_curso';
+    else if(!ESTADO_ACT_DEFS[act.estado]) act.estado = 'planeada';
+  }
   if(!Array.isArray(act.historial)) act.historial = [];
   act.historial.push(entry);
   return entry;
@@ -2485,7 +2531,7 @@ function viewActividades(){
     fechaInicio: a => a.fechaInicio || '',
     fechaFin: a => a.fechaFin || '',
     avance: a => Number(a.avance)||0,
-    estado: a => a.estado==='terminado' ? 1 : 0,
+    estado: a => { const i = ESTADO_ACT_ORDEN.indexOf(a.estado); return i < 0 ? 0 : i; },
     semaforo: a => rankSemaforo(calcularSemaforo(a).code)
   };
   const searchFn = a => [a.nombre, proyectosMap[a.proyectoId]?.nombre, nombreResultado(a), a.areaResponsable, respMap[a.responsableId], a.productoFinal, a.notas, a.ajustes, a.comentariosSeguimiento].join(' ');
@@ -2496,7 +2542,7 @@ function viewActividades(){
     resultadoId: a => a.resultadoId || '',
     areaResponsable: a => a.areaResponsable || '',
     responsableId: a => a.responsableId || '',
-    estado: a => a.estado==='terminado' ? 'terminado' : 'pendiente',
+    estado: a => ESTADO_ACT_DEFS[a.estado] ? a.estado : 'planeada',
     semaforoCode: a => calcularSemaforo(a).code
   };
   const filtrosConfig = [
@@ -2505,7 +2551,7 @@ function viewActividades(){
     { key:'resultadoId', label:'Resultado', opciones: Store.data.proyectos.flatMap(p=>(p.resultados||[]).map(r=>({value:r.id, label:`${r.nombre} (${p.nombre})`}))) },
     { key:'areaResponsable', label:'Área responsable', opciones: Array.from(new Set(Store.data.actividades.map(a=>a.areaResponsable).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'es')).map(v=>({value:v,label:v})) },
     { key:'responsableId', label:'Responsable', opciones: Store.data.responsables.map(r=>({value:r.id, label:r.nombre})) },
-    { key:'estado', label:'Estado', opciones: [{value:'pendiente',label:'Pendiente'},{value:'terminado',label:'Terminado'}] },
+    { key:'estado', label:'Estado', opciones: ESTADO_ACT_ORDEN.map(e=>({value:e, label:ESTADO_ACT_DEFS[e].label})) },
     { key:'semaforoCode', label:'Semáforo', opciones: ['verde','amarillo','rojo','gris'].map(code=>({value:code, label:SEMAFORO_DEFS[code].label})) }
   ];
 
@@ -2553,7 +2599,7 @@ function viewActividades(){
                 <td>${fmtDate(a.fechaInicio)}</td>
                 <td>${fmtDate(a.fechaFin)}${a.fechaCumplimiento?`<div class="cell-sub">Cumplida: ${fmtDate(a.fechaCumplimiento)}</div>`:''}</td>
                 <td>${fmtAvance(a)}</td>
-                <td>${a.estado==='terminado'?'Terminado':'Pendiente'}</td>
+                <td><span class="estado-badge estado-${esc(a.estado)}">${esc(etiquetaEstadoActividad(a.estado))}</span></td>
                 <td>${chip(sem)}</td>
                 <td><div class="row-actions">
                   <button class="icon-btn" data-action="log-avance" data-id="${a.id}" title="Registrar avance">📈</button>
@@ -2572,7 +2618,8 @@ function viewActividades(){
 function formActividad(existing){
   const a = existing || { proyectoId:'', resultadoId:'', responsableId:'', areaResponsable:'', nombre:'', fechaInicio:'', fechaFin:'',
     modoAvance:'porcentaje', avance:0, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'',
-    fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[] };
+    fechaCumplimiento:'', estado:'planeada', ajustes:'', comentariosSeguimiento:'', historial:[] };
+  const estadoAct = ESTADO_ACT_DEFS[a.estado] ? a.estado : 'planeada';
   const modo = a.modoAvance === 'meta' ? 'meta' : 'porcentaje';
   const proyOpts = Store.data.proyectos.map(p=>`<option value="${p.id}" ${p.id===a.proyectoId?'selected':''}>${esc(p.nombre)}</option>`).join('');
   const proyectoActual = Store.get('proyectos', a.proyectoId || Store.data.proyectos[0]?.id);
@@ -2651,10 +2698,9 @@ function formActividad(existing){
           <div>
             <label>Estado de la actividad</label>
             <select name="estado" id="selEstadoActividad">
-              <option value="pendiente" ${a.estado!=='terminado'?'selected':''}>Pendiente</option>
-              <option value="terminado" ${a.estado==='terminado'?'selected':''}>Terminado</option>
+              ${ESTADO_ACT_ORDEN.map(e=>`<option value="${e}" ${estadoAct===e?'selected':''}>${ESTADO_ACT_DEFS[e].label}</option>`).join('')}
             </select>
-            <div class="field-hint">Marcar "Terminado" pone el avance en 100%. Si el avance baja de 100%, vuelve a "Pendiente" automáticamente.</div>
+            <div class="field-hint">El estado lo eliges tú (el ciclo de vida de la actividad). El semáforo se calcula solo. Marcar "Terminada" pone el avance en 100%; si el avance llega a 100% se marca "Terminada" sola. "En pausa" y "Cancelada" no se tocan solas.</div>
           </div>
         </div>
         <div class="field">
@@ -3040,13 +3086,21 @@ function openModal(html, editingId){
     validarOrdenFechas(); // por si el formulario abre con fechas ya invertidas (ej. datos importados)
   }
 
-  // Slider de % — formulario principal de actividad (sincroniza también el Estado: Terminado <-> 100%)
+  // Slider de % — formulario principal de actividad (sincroniza también el Estado con el avance)
   const rangeInput = modal.querySelector('#rangeAvance');
   const selEstado = modal.querySelector('#selEstadoActividad');
+  // Mueve el <select> de estado según el % SIN pisar una decisión humana (En pausa / Cancelada).
+  const sincronizarEstadoConAvance = (pct)=>{
+    if(!selEstado) return;
+    if(selEstado.value === 'en_pausa' || selEstado.value === 'cancelada') return;
+    if(pct >= 100) selEstado.value = 'terminada';
+    else if(selEstado.value === 'terminada') selEstado.value = 'en_curso';
+    else if(pct > 0 && selEstado.value === 'planeada') selEstado.value = 'en_curso';
+  };
   if(rangeInput){
     rangeInput.addEventListener('input', ()=>{
       modal.querySelector('#rangeVal').textContent = rangeInput.value + '%';
-      if(selEstado) selEstado.value = Number(rangeInput.value) >= 100 ? 'terminado' : 'pendiente';
+      sincronizarEstadoConAvance(Number(rangeInput.value));
     });
   }
   // Slider de % — modal rápido "Registrar avance"
@@ -3091,13 +3145,13 @@ function openModal(html, editingId){
     elTotal.addEventListener('input', recalcular);
   };
   enlazarPreviewMeta(modal.querySelector('#metaAlcanzada'), modal.querySelector('#metaTotal'), modal.querySelector('#metaPreview'),
-    (pct)=>{ if(selEstado) selEstado.value = pct >= 100 ? 'terminado' : 'pendiente'; });
+    (pct)=>{ sincronizarEstadoConAvance(pct); });
   enlazarPreviewMeta(modal.querySelector('#avMetaAlcanzada'), modal.querySelector('#avMetaTotal'), modal.querySelector('#avMetaPreview'));
 
   // Estado -> Avance: marcar "Terminado" fuerza el avance a 100% (el sentido inverso ya lo cubren los listeners de arriba)
   if(selEstado){
     selEstado.addEventListener('change', ()=>{
-      if(selEstado.value !== 'terminado') return;
+      if(selEstado.value !== 'terminada') return;
       const modoActual = modal.querySelector('#selModoAvance')?.value || 'porcentaje';
       if(modoActual === 'meta'){
         const metaTotalEl = modal.querySelector('#metaTotal');
@@ -3668,15 +3722,16 @@ document.addEventListener('submit', (e)=>{
       // Resolver "Área responsable": si eligió "Otra", usar lo escrito; si no, el valor del desplegable
       data.areaResponsable = data.areaResponsable === '__otra__' ? (data.areaResponsableOtra || '').trim() : (data.areaResponsable || '');
       delete data.areaResponsableOtra;
-      // Estado <-> Avance: garantiza consistencia sin importar cómo se envió el formulario
-      if(data.estado === 'terminado'){
+      // Estado (ciclo de vida elegido a mano) <-> Avance
+      if(!ESTADO_ACT_DEFS[data.estado]) data.estado = 'planeada';
+      if(data.estado === 'terminada'){
         data.avance = '100';
         if(data.modoAvance === 'meta'){
           const mt = Number(data.metaTotal)||0;
           if(mt > 0) data.metaAlcanzada = String(mt);
         }
-      } else if(Number(data.avance) >= 100){
-        data.estado = 'terminado';
+      } else if(data.estado !== 'en_pausa' && data.estado !== 'cancelada' && Number(data.avance) >= 100){
+        data.estado = 'terminada';
       }
       // Checkbox: FormData solo la trae si está marcada -> convertir a booleano explícito
       data.omitirAlertaResultado = !!fd.get('omitirAlertaResultado');
@@ -3976,7 +4031,7 @@ function renderActividadesReporteHtml(actividades, resultadosMap, respMap){
   if(!actividades.length) return `<p class="rep-empty">Este proyecto aún no tiene actividades registradas.</p>`;
   const filas = actividades.map(a=>{
     const sem = calcularSemaforo(a);
-    const estadoTxt = a.estado==='terminado' ? 'Terminado' : 'Pendiente';
+    const estadoTxt = etiquetaEstadoActividad(a.estado);
     return `<tr>
       <td>${esc(a.nombre)}${a.productoFinal?`<div class="rep-subtext">Producto final: ${esc(a.productoFinal)}</div>`:''}${a.fechaCumplimiento?`<div class="rep-subtext">Estado: ${esc(estadoTxt)} — cumplida el ${fmtDate(a.fechaCumplimiento)}</div>`:''}</td>
       <td>${esc(resultadosMap[a.resultadoId]||'Sin vincular')}</td>
@@ -4155,7 +4210,7 @@ function abrirReporteResponsable(respId){
           <td>${esc(a.nombre||'(sin nombre)')}${a.notas?`<div class="rep-subtext">${esc(a.notas)}</div>`:''}</td>
           <td>${fmtDate(a.fechaInicio)} – ${fmtDate(a.fechaFin)}</td>
           <td>${barraReporte(Number(a.avance)||0)}</td>
-          <td>${a.estado==='terminado'?'Terminado':'Pendiente'}</td>
+          <td>${esc(etiquetaEstadoActividad(a.estado))}</td>
           <td>${chipReporte(calcularSemaforo(a))}</td>
         </tr>`).join('');
       return `
@@ -4357,7 +4412,7 @@ function buildSheetsData(){
     'Fecha inicio': fmtDate(a.fechaInicio),
     'Fecha fin (plazo)': fmtDate(a.fechaFin),
     'Fecha de cumplimiento': fmtDate(a.fechaCumplimiento),
-    'Estado': a.estado==='terminado' ? 'Terminado' : 'Pendiente',
+    'Estado': etiquetaEstadoActividad(a.estado),
     'Modo de avance': a.modoAvance==='meta' ? 'Meta con unidades' : 'Porcentaje directo',
     '% Avance': Number(a.avance)||0,
     'Meta alcanzada': a.modoAvance==='meta' ? (Number(a.metaAlcanzada)||0) : '',
@@ -4644,7 +4699,7 @@ function construirFormatoProyectoRTF(proyectoId, incluirCompletadas){
   resultados.forEach(res => {
     const actividadesTodas = Store.data.actividades.filter(a=>a.proyectoId===p.id && a.resultadoId===res.id);
     const indicadoresTodos = Array.isArray(res.indicadores) ? res.indicadores : [];
-    const actividadesDe = incluirCompletadas ? actividadesTodas : actividadesTodas.filter(a=>a.estado!=='terminado');
+    const actividadesDe = incluirCompletadas ? actividadesTodas : actividadesTodas.filter(a=>!esActividadCerrada(a));
     const indicadoresDe = incluirCompletadas ? indicadoresTodos : indicadoresTodos.filter(ind=>!indicadorEstaCompletado(ind));
 
     b += rtfTableRow([{shade:RTF_C.PURPLE, lines:[{text:'  RESULTADO  ', size:14, bold:true, color:RTF_C.WHITE}]}], [RTF_CONTENT_W], {borderColor:RTF_C.PURPLE});
@@ -4658,7 +4713,7 @@ function construirFormatoProyectoRTF(proyectoId, incluirCompletadas){
         b += rtfTableRow([rtfActCell(a.nombre||'', contextoAvanceActividad(a)), rtfTxtCell(fmtDate(a.fechaFin),{color:RTF_C.GRAYTXT}), rtfTxtCell('☐ sí   ☐ no',{color:RTF_C.GRAYMUTED}), rtfTxtCell(' '), rtfTxtCell(' ')], actW);
       });
     } else if(actividadesTodas.length){
-      b += rtfParagraph({text:'Todas las actividades de este resultado ya están completadas.', italic:true, size:16, color:RTF_C.GRAYMUTED}, {spaceAfter:100});
+      b += rtfParagraph({text:'Todas las actividades de este resultado ya están cerradas (terminadas o canceladas).', italic:true, size:16, color:RTF_C.GRAYMUTED}, {spaceAfter:100});
     } else {
       b += rtfParagraph({text:'Sin actividades registradas todavía.', italic:true, size:16, color:RTF_C.GRAYMUTED}, {spaceAfter:100});
     }
@@ -4691,11 +4746,11 @@ function construirFormatoActividadesAgrupadasRTF(kicker, titulo, subtitulo, acti
   b += rtfParagraph({text:'Periodo que cubre este reporte:', size:18, color:RTF_C.GRAYTXT}, {spaceAfter:50});
   b += rtfParagraph({text:' '}, {spaceAfter:120, borderBottom:{width:6,color:RTF_C.GRAYLINE}});
 
-  const actividadesFiltradas = incluirCompletadas ? actividadesTodas : actividadesTodas.filter(a=>a.estado!=='terminado');
+  const actividadesFiltradas = incluirCompletadas ? actividadesTodas : actividadesTodas.filter(a=>!esActividadCerrada(a));
 
   if(!actividadesFiltradas.length){
     b += rtfParagraph({
-      text: actividadesTodas.length ? 'Todas las actividades de este criterio ya están completadas.' : 'No se encontraron actividades para este criterio.',
+      text: actividadesTodas.length ? 'Todas las actividades de este criterio ya están cerradas (terminadas o canceladas).' : 'No se encontraron actividades para este criterio.',
       italic:true, size:18, color:RTF_C.GRAYMUTED
     }, {spaceBefore:160});
   } else {
@@ -4842,7 +4897,7 @@ function construirFormatoNuevaActividadRTF(){
   b += rtfCasillas('¿Cómo se mide el avance?', ['Porcentaje directo (0–100%)', 'Meta (ej. 30 de 100 escuelas)']);
   b += rtfCampoBlanco('Si es PORCENTAJE — % de avance actual');
   b += rtfCampoBlanco('Si es META — "va ___ de ___" y unidad', {hint:'Ej. va 30 de 100 · unidad: escuelas'});
-  b += rtfCasillas('Estado de la actividad:', ['Pendiente', 'Terminado']);
+  b += rtfCasillas('Estado de la actividad:', ['Planeada', 'En curso', 'En pausa', 'Terminada', 'Cancelada']);
   b += rtfCampoBlanco('Fecha de cumplimiento real (solo si ya terminó)');
   b += rtfCampoBlanco('Producto final / entregable', {lineas:2});
   b += rtfCampoBlanco('Ajustes respecto a lo planeado (opcional)', {lineas:2});
@@ -5136,17 +5191,17 @@ const DEMO_EJEMPLO = {
       ]}
   ],
   actividades: [
-    { id:'act_ej1', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Selección y entrega de becas del ciclo escolar', fechaInicio:'2026-07-15', fechaFin:'2026-08-15', modoAvance:'porcentaje', avance:100, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'Acta del comité de becas y lista de beneficiarios', notas:'', fechaCumplimiento:'2026-08-14', estado:'terminado', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-14', modoAvance:'porcentaje', nota:'Entrega concluida', registradoPor:'Laura Méndez Ríos', avance:100 } ] },
-    { id:'act_ej2', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej2', areaResponsable:'Coordinación del Programa Educativo', nombre:'Sesiones semanales de tutoría (agosto)', fechaInicio:'2026-08-01', fechaFin:'2026-09-20', modoAvance:'meta', avance:60, metaTotal:'5', metaAlcanzada:'3', metaUnidad:'sesiones', estadoManual:'', productoFinal:'Bitácora de tutorías', notas:'Buena asistencia en La Ceiba.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-25', modoAvance:'meta', nota:'', registradoPor:'Diego Fuentes Salas', avance:60, metaTotal:5, metaAlcanzada:3, metaUnidad:'sesiones' } ] },
-    { id:'act_ej3', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej2', areaResponsable:'Coordinación del Programa Educativo', nombre:'Visitas a casa de jóvenes en riesgo de abandono', fechaInicio:'2026-08-10', fechaFin:'2026-09-30', modoAvance:'porcentaje', avance:40, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-28', modoAvance:'porcentaje', nota:'6 de 15 visitas', registradoPor:'Diego Fuentes Salas', avance:40 } ] },
-    { id:'act_ej4', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Informe de permanencia del primer semestre', fechaInicio:'2026-06-15', fechaFin:'2026-07-30', modoAvance:'porcentaje', avance:20, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Falta cerrar los datos de una comunidad.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'Se retrasó por cambio de director en una secundaria.', historial:[ { fecha:'2026-07-20', modoAvance:'porcentaje', nota:'Borrador', registradoPor:'Laura Méndez Ríos', avance:20 } ] },
-    { id:'act_ej5', proyectoId:'proy_ej2', resultadoId:'res_ej2', responsableId:'resp_ej3', areaResponsable:'Coordinación del Programa Educativo', nombre:'Taller de proyecto de vida', fechaInicio:'2026-05-05', fechaFin:'2026-06-20', modoAvance:'porcentaje', avance:100, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'Carpetas de proyecto de vida de cada participante', notas:'', fechaCumplimiento:'2026-06-18', estado:'terminado', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-06-18', modoAvance:'porcentaje', nota:'', registradoPor:'Ana Karen López', avance:100 } ] },
-    { id:'act_ej6', proyectoId:'proy_ej2', resultadoId:'res_ej2', responsableId:'resp_ej3', areaResponsable:'Coordinación del Programa Educativo', nombre:'Feria de opciones educativas y de empleo', fechaInicio:'2026-10-10', fechaFin:'2026-10-25', modoAvance:'porcentaje', avance:0, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Pendiente confirmar universidades invitadas.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[] },
-    { id:'act_ej7', proyectoId:'proy_ej2', resultadoId:'res_ej2', responsableId:'resp_ej3', areaResponsable:'Coordinación del Programa Educativo', nombre:'Acompañamiento en trámites de inscripción', fechaInicio:'2026-08-01', fechaFin:'2026-11-15', modoAvance:'porcentaje', avance:30, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-27', modoAvance:'porcentaje', nota:'', registradoPor:'Ana Karen López', avance:30 } ] },
-    { id:'act_ej8', proyectoId:'proy_ej3', resultadoId:'res_ej3', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Sesión 1 de la Escuela para familias', fechaInicio:'2026-07-20', fechaFin:'2026-08-05', modoAvance:'porcentaje', avance:100, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'Lista de asistencia y fotos', notas:'', fechaCumplimiento:'2026-08-05', estado:'terminado', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-05', modoAvance:'porcentaje', nota:'', registradoPor:'Laura Méndez Ríos', avance:100 } ] },
-    { id:'act_ej9', proyectoId:'proy_ej3', resultadoId:'res_ej3', responsableId:'resp_ej2', areaResponsable:'Coordinación del Programa Educativo', nombre:'Sesión 2: cómo apoyar el estudio en casa', fechaInicio:'2026-08-20', fechaFin:'2026-09-15', modoAvance:'porcentaje', avance:50, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-09-01', modoAvance:'porcentaje', nota:'Convocatoria enviada', registradoPor:'Diego Fuentes Salas', avance:50 } ] },
-    { id:'act_ej10', proyectoId:'proy_ej3', resultadoId:'res_ej3', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Reunión con directores de las tres secundarias', fechaInicio:'2026-07-10', fechaFin:'2026-08-01', modoAvance:'porcentaje', avance:0, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'No se ha logrado juntar a los tres.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[] },
-    { id:'act_ej11', proyectoId:'proy_ej1', resultadoId:'', responsableId:'resp_ej4', areaResponsable:'Administración', nombre:'Comprobación de gastos del trimestre', fechaInicio:'2026-08-15', fechaFin:'2026-09-10', modoAvance:'porcentaje', avance:70, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Faltan facturas de dos actividades.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-30', modoAvance:'porcentaje', nota:'', registradoPor:'Roberto Cano Díaz', avance:70 } ] }
+    { id:'act_ej1', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Selección y entrega de becas del ciclo escolar', fechaInicio:'2026-07-15', fechaFin:'2026-08-15', modoAvance:'porcentaje', avance:100, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'Acta del comité de becas y lista de beneficiarios', notas:'', fechaCumplimiento:'2026-08-14', estado:'terminada', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-14', modoAvance:'porcentaje', nota:'Entrega concluida', registradoPor:'Laura Méndez Ríos', avance:100 } ] },
+    { id:'act_ej2', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej2', areaResponsable:'Coordinación del Programa Educativo', nombre:'Sesiones semanales de tutoría (agosto)', fechaInicio:'2026-08-01', fechaFin:'2026-09-20', modoAvance:'meta', avance:60, metaTotal:'5', metaAlcanzada:'3', metaUnidad:'sesiones', estadoManual:'', productoFinal:'Bitácora de tutorías', notas:'Buena asistencia en La Ceiba.', fechaCumplimiento:'', estado:'en_curso', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-25', modoAvance:'meta', nota:'', registradoPor:'Diego Fuentes Salas', avance:60, metaTotal:5, metaAlcanzada:3, metaUnidad:'sesiones' } ] },
+    { id:'act_ej3', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej2', areaResponsable:'Coordinación del Programa Educativo', nombre:'Visitas a casa de jóvenes en riesgo de abandono', fechaInicio:'2026-08-10', fechaFin:'2026-09-30', modoAvance:'porcentaje', avance:40, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'', fechaCumplimiento:'', estado:'en_curso', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-28', modoAvance:'porcentaje', nota:'6 de 15 visitas', registradoPor:'Diego Fuentes Salas', avance:40 } ] },
+    { id:'act_ej4', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Informe de permanencia del primer semestre', fechaInicio:'2026-06-15', fechaFin:'2026-07-30', modoAvance:'porcentaje', avance:20, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Falta cerrar los datos de una comunidad.', fechaCumplimiento:'', estado:'en_pausa', ajustes:'', comentariosSeguimiento:'En pausa: esperamos que la secundaria de El Roble entregue sus datos de permanencia.', historial:[ { fecha:'2026-07-20', modoAvance:'porcentaje', nota:'Borrador', registradoPor:'Laura Méndez Ríos', avance:20 } ] },
+    { id:'act_ej5', proyectoId:'proy_ej2', resultadoId:'res_ej2', responsableId:'resp_ej3', areaResponsable:'Coordinación del Programa Educativo', nombre:'Taller de proyecto de vida', fechaInicio:'2026-05-05', fechaFin:'2026-06-20', modoAvance:'porcentaje', avance:100, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'Carpetas de proyecto de vida de cada participante', notas:'', fechaCumplimiento:'2026-06-18', estado:'terminada', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-06-18', modoAvance:'porcentaje', nota:'', registradoPor:'Ana Karen López', avance:100 } ] },
+    { id:'act_ej6', proyectoId:'proy_ej2', resultadoId:'res_ej2', responsableId:'resp_ej3', areaResponsable:'Coordinación del Programa Educativo', nombre:'Feria de opciones educativas y de empleo', fechaInicio:'2026-10-10', fechaFin:'2026-10-25', modoAvance:'porcentaje', avance:0, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Pendiente confirmar universidades invitadas.', fechaCumplimiento:'', estado:'planeada', ajustes:'', comentariosSeguimiento:'', historial:[] },
+    { id:'act_ej7', proyectoId:'proy_ej2', resultadoId:'res_ej2', responsableId:'resp_ej3', areaResponsable:'Coordinación del Programa Educativo', nombre:'Acompañamiento en trámites de inscripción', fechaInicio:'2026-08-01', fechaFin:'2026-11-15', modoAvance:'porcentaje', avance:30, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'', fechaCumplimiento:'', estado:'en_curso', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-27', modoAvance:'porcentaje', nota:'', registradoPor:'Ana Karen López', avance:30 } ] },
+    { id:'act_ej8', proyectoId:'proy_ej3', resultadoId:'res_ej3', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Sesión 1 de la Escuela para familias', fechaInicio:'2026-07-20', fechaFin:'2026-08-05', modoAvance:'porcentaje', avance:100, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'Lista de asistencia y fotos', notas:'', fechaCumplimiento:'2026-08-05', estado:'terminada', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-05', modoAvance:'porcentaje', nota:'', registradoPor:'Laura Méndez Ríos', avance:100 } ] },
+    { id:'act_ej9', proyectoId:'proy_ej3', resultadoId:'res_ej3', responsableId:'resp_ej2', areaResponsable:'Coordinación del Programa Educativo', nombre:'Sesión 2: cómo apoyar el estudio en casa', fechaInicio:'2026-08-20', fechaFin:'2026-09-15', modoAvance:'porcentaje', avance:50, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'', fechaCumplimiento:'', estado:'en_curso', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-09-01', modoAvance:'porcentaje', nota:'Convocatoria enviada', registradoPor:'Diego Fuentes Salas', avance:50 } ] },
+    { id:'act_ej10', proyectoId:'proy_ej3', resultadoId:'res_ej3', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Reunión con directores de las tres secundarias', fechaInicio:'2026-07-10', fechaFin:'2026-08-01', modoAvance:'porcentaje', avance:0, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Se canceló: se decidió acompañar a cada secundaria por separado en vez de una reunión conjunta.', fechaCumplimiento:'', estado:'cancelada', ajustes:'', comentariosSeguimiento:'', historial:[] },
+    { id:'act_ej11', proyectoId:'proy_ej1', resultadoId:'', responsableId:'resp_ej4', areaResponsable:'Administración', nombre:'Comprobación de gastos del trimestre', fechaInicio:'2026-08-15', fechaFin:'2026-09-10', modoAvance:'porcentaje', avance:70, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Faltan facturas de dos actividades.', fechaCumplimiento:'', estado:'en_curso', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-30', modoAvance:'porcentaje', nota:'', registradoPor:'Roberto Cano Díaz', avance:70 } ] }
   ],
   _papelera: []
 };
