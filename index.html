@@ -556,8 +556,14 @@
     background: var(--color-primary); color:#fff; padding: 11px 20px; border-radius: 30px;
     font-size: 13px; font-weight:600; box-shadow: var(--shadow-modal); opacity:0; pointer-events:none;
     transition: opacity .2s, transform .2s; z-index:200;
+    display:flex; align-items:center; gap:12px; max-width:min(92vw,520px);
   }
   #toast.show{ opacity:1; transform: translateX(-50%) translateY(0); }
+  #toast .toast-accion{
+    pointer-events:auto; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.45);
+    color:#fff; font:inherit; font-weight:700; padding:4px 12px; border-radius:20px; cursor:pointer; white-space:nowrap;
+  }
+  #toast .toast-accion:hover{ background:rgba(255,255,255,.3); }
 
   /* ---------- Mobile ---------- */
   .topbar{ display:none; }
@@ -596,7 +602,9 @@
       <button class="ghost-btn" id="btnCsv">🧾 Exportar a CSV</button>
       <button class="ghost-btn" id="btnImport">⬆ Importar respaldo (.json)</button>
       <input type="file" id="fileImport" accept="application/json" style="display:none">
-      <button class="ghost-btn" id="btnWipe" style="color:var(--color-rojo); border-color:#E7C6C1;">🗑 Vaciar todos los datos</button>
+      <button class="ghost-btn" id="btnPapelera" style="display:none;">🗑 Papelera</button>
+      <button class="ghost-btn" id="btnWipe" style="color:var(--color-rojo); border-color:#E7C6C1;">🧹 Vaciar todos los datos</button>
+      <button class="ghost-btn" id="btnDeshacer" style="display:none;">↩ Deshacer lo último</button>
       <p class="storage-note">Los datos se guardan solo en este dispositivo, sin cifrar. Exporta un respaldo (.json) con frecuencia para no perderlos, y guárdalo/compártelo como archivo confidencial (ver Guía §8). Excel/CSV son para compartir o analizar, no reemplazan el respaldo.</p>
       <p class="credit-note"><b>Desarrollado por Colectivo META (COMETA). Todos los derechos reservados, 2026.</b></p>
       <p class="version-note" id="versionNote"></p>
@@ -615,7 +623,9 @@
       <button class="btn btn-outline btn-sm" id="btnExcelM">Excel</button>
       <button class="btn btn-outline btn-sm" id="btnCsvM">CSV</button>
       <button class="btn btn-outline btn-sm" id="btnImportM">Importar</button>
+      <button class="btn btn-outline btn-sm" id="btnPapeleraM" style="display:none;">Papelera</button>
       <button class="btn btn-outline btn-sm" id="btnWipeM" style="color:var(--color-rojo);border-color:var(--color-rojo);">Vaciar</button>
+      <button class="btn btn-outline btn-sm" id="btnDeshacerM" style="display:none;">↩ Deshacer</button>
       <button class="btn btn-outline btn-sm" id="btnZoomOutM" title="Reducir tamaño de letra">A−</button>
       <button class="btn btn-outline btn-sm" id="btnZoomInM" title="Aumentar tamaño de letra">A+</button>
     </div>
@@ -654,7 +664,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    ========================================================= */
 
 const STORAGE_KEY = 'cometa_data_v2';
-const APP_VERSION = '0.9.2'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
+const APP_VERSION = '0.10.0'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
 
 function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -713,6 +723,38 @@ const Store = {
   get(coll, id){ return this.data[coll].find(x=>x.id===id); }
 };
 Store.load();
+
+/* ---------------- Deshacer (últimos cambios destructivos de la sesión) ----------------
+   Red de seguridad para acciones irreversibles (borrar, vaciar, importar reemplazando).
+   Guarda una copia completa de los datos ANTES de la acción; se puede revertir mientras
+   la app siga abierta. Para recuperar algo más viejo están la Papelera y los respaldos. */
+const undoStack = [];
+const UNDO_MAX = 5;
+function pushUndo(label){
+  try{
+    undoStack.push({ label: label || 'cambio', snapshot: JSON.stringify(Store.data) });
+    if(undoStack.length > UNDO_MAX) undoStack.shift();
+    actualizarBotonDeshacer();
+  }catch(e){ /* si el snapshot falla, seguimos sin deshacer para no bloquear la acción */ }
+}
+function hayDeshacer(){ return undoStack.length > 0; }
+function deshacer(){
+  const u = undoStack.pop();
+  if(!u) return;
+  try{
+    Store.data = JSON.parse(u.snapshot);
+    Store.save();
+    if(typeof overlay !== 'undefined' && overlay.classList.contains('open')) closeModal();
+    renderView();
+    actualizarBotonDeshacer();
+    showToast('Se deshizo: ' + u.label);
+  }catch(e){ showToast('No se pudo deshacer ese cambio'); }
+}
+function actualizarBotonDeshacer(){
+  const disp = hayDeshacer() ? '' : 'none';
+  const a = document.getElementById('btnDeshacer'); if(a) a.style.display = disp;
+  const b = document.getElementById('btnDeshacerM'); if(b) b.style.display = disp;
+}
 
 /* ---------------- Semáforo de actividades (actividades / proyectos) ---------------- */
 // Devuelve {code, label} donde code es verde|amarillo|rojo|gris
@@ -2126,6 +2168,29 @@ function fmtHistorialValor(h){
   return `${Number(h.avance)||0}%`;
 }
 
+// Aplica un registro de avance a una actividad: arma la entrada de histórico, la agrega, y
+// sincroniza act.avance / act.estado. Lo comparten el modal "Registrar avance" y el registro
+// en lote. NO guarda ni renderiza — de eso se encarga quien lo llama. Devuelve la entrada.
+// datos: { fecha, nota, registradoPor, avance (modo %) | metaTotal+metaAlcanzada+metaUnidad (modo meta) }
+function aplicarAvanceActividad(act, datos){
+  const modoActual = act.modoAvance === 'meta' ? 'meta' : 'porcentaje';
+  const entry = { fecha: datos.fecha || todayISO(), modoAvance: modoActual, nota: datos.nota || '', registradoPor: datos.registradoPor || '' };
+  if(modoActual === 'meta'){
+    const mt = Number(datos.metaTotal)||0, ma = Number(datos.metaAlcanzada)||0;
+    entry.metaUnidad = datos.metaUnidad || act.metaUnidad || '';
+    entry.metaTotal = mt; entry.metaAlcanzada = ma;
+    entry.avance = mt>0 ? Math.min(100, Math.max(0, Math.round(ma/mt*100))) : 0;
+    act.metaTotal = mt; act.metaAlcanzada = ma; act.metaUnidad = entry.metaUnidad;
+  } else {
+    entry.avance = Math.min(100, Math.max(0, Number(datos.avance)||0));
+  }
+  act.avance = entry.avance;
+  act.estado = act.avance >= 100 ? 'terminado' : 'pendiente';
+  if(!Array.isArray(act.historial)) act.historial = [];
+  act.historial.push(entry);
+  return entry;
+}
+
 function viewActividades(){
   const all = Store.data.actividades;
   const st = tableState.actividades;
@@ -2811,12 +2876,24 @@ function actualizarContadorResultadosTab(){
 
 /* ---------------- Toast ---------------- */
 let toastTimer;
-function showToast(msg){
+// showToast('mensaje') o showToast('mensaje', { accion:{ label, fn }, duracion })
+function showToast(msg, opts){
+  opts = opts || {};
   const t = document.getElementById('toast');
-  t.textContent = msg;
+  t.innerHTML = '';
+  const span = document.createElement('span');
+  span.textContent = msg;
+  t.appendChild(span);
+  if(opts.accion && typeof opts.accion.fn === 'function'){
+    const b = document.createElement('button');
+    b.className = 'toast-accion';
+    b.textContent = opts.accion.label || 'Deshacer';
+    b.addEventListener('click', ()=>{ t.classList.remove('show'); opts.accion.fn(); });
+    t.appendChild(b);
+  }
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), opts.duracion || 2200);
 }
 
 // Alternar campos cuantitativos <-> cualitativos dentro de un bloque de indicador (delegado,
@@ -3028,6 +3105,7 @@ function handleAction(action, id, idx){
     const res = p && Array.isArray(p.resultados) ? p.resultados.find(r=>r.id===resId) : null;
     const ind = res && Array.isArray(res.indicadores) ? res.indicadores.find(i=>i.id===indId) : null;
     if(p && res && ind && Array.isArray(ind.historial)){
+      pushUndo('eliminación de un registro de histórico');
       ind.historial.splice(Number(entryIdx), 1);
       Store.save();
       openModal(formProyecto(p), p.id);
@@ -3048,6 +3126,7 @@ function handleAction(action, id, idx){
   if(action==='del-historial-entry'){
     const act = Store.get('actividades', id);
     if(act && Array.isArray(act.historial)){
+      pushUndo('eliminación de un registro de histórico');
       act.historial.splice(Number(idx), 1);
       Store.save();
       openModal(formActividad(act), id);
@@ -3070,10 +3149,11 @@ function handleAction(action, id, idx){
 
 function confirmDelete(coll, id, msg, extra){
   if(confirm(msg)){
+    pushUndo('eliminación');
     Store.remove(coll, id);
     if(extra) extra();
     renderView();
-    showToast('Eliminado correctamente');
+    showToast('Eliminado', { accion:{ label:'Deshacer', fn: deshacer }, duracion: 6000 });
   }
 }
 
@@ -3209,21 +3289,10 @@ document.addEventListener('submit', (e)=>{
     const fd = new FormData(e.target);
     const data = Object.fromEntries(fd.entries());
     const registradoPor = resolverRegistradoPor(data);
-    const modoActual = act.modoAvance === 'meta' ? 'meta' : 'porcentaje';
-    const entry = { fecha: data.fecha || todayISO(), modoAvance: modoActual, nota: data.nota || '', registradoPor };
-
-    if(modoActual === 'meta'){
-      const mt = Number(data.metaTotal)||0, ma = Number(data.metaAlcanzada)||0;
-      entry.metaTotal = mt; entry.metaAlcanzada = ma; entry.metaUnidad = data.metaUnidad || '';
-      entry.avance = mt>0 ? Math.min(100, Math.max(0, Math.round(ma/mt*100))) : 0;
-      act.metaTotal = mt; act.metaAlcanzada = ma; act.metaUnidad = data.metaUnidad || '';
-    } else {
-      entry.avance = Number(data.avance)||0;
-    }
-    act.avance = entry.avance;
-    act.estado = act.avance >= 100 ? 'terminado' : 'pendiente';
-    if(!Array.isArray(act.historial)) act.historial = [];
-    act.historial.push(entry);
+    aplicarAvanceActividad(act, {
+      fecha: data.fecha, nota: data.nota, registradoPor,
+      avance: data.avance, metaTotal: data.metaTotal, metaAlcanzada: data.metaAlcanzada, metaUnidad: data.metaUnidad,
+    });
     Store.save();
     if(registradoPor) safeLSSet('cometa_ultimo_registrado_por', registradoPor);
     closeModal();
@@ -3307,11 +3376,13 @@ function importData(file){
 function wipeAll(){
   if(confirm('Esto eliminará TODOS los datos guardados en este dispositivo. ¿Deseas continuar?')){
     if(confirm('Confirma una vez más: se perderá tu Teoría de Cambio completa, proyectos, actividades y responsables.')){
-      Store.data = { perfil:{nombreOrganizacion:'',vision:'',mision:''}, objetivosGenerales: [], objetivosEspecificos: [], proyectos: [], actividades: [], responsables: [] };
+      pushUndo('vaciado de todos los datos');
+      const papeleraPrevia = Array.isArray(Store.data._papelera) ? Store.data._papelera : [];
+      Store.data = { perfil:{nombreOrganizacion:'',vision:'',mision:''}, objetivosGenerales: [], objetivosEspecificos: [], proyectos: [], actividades: [], responsables: [], _papelera: papeleraPrevia };
       Store.save();
       resetCambiosDesdeRespaldo();
       renderView();
-      showToast('Datos eliminados');
+      showToast('Datos eliminados', { accion:{ label:'Deshacer', fn: deshacer }, duracion: 8000 });
     }
   }
 }
@@ -4261,12 +4332,29 @@ document.getElementById('btnCsv').addEventListener('click', exportCSV);
 document.getElementById('btnCsvM').addEventListener('click', exportCSV);
 document.getElementById('btnWipe').addEventListener('click', wipeAll);
 document.getElementById('btnWipeM').addEventListener('click', wipeAll);
+document.getElementById('btnDeshacer')?.addEventListener('click', deshacer);
+document.getElementById('btnDeshacerM')?.addEventListener('click', deshacer);
+if(typeof abrirPapelera === 'function'){
+  document.getElementById('btnPapelera')?.addEventListener('click', abrirPapelera);
+  document.getElementById('btnPapeleraM')?.addEventListener('click', abrirPapelera);
+}
 const fileImport = document.getElementById('fileImport');
 document.getElementById('btnImport').addEventListener('click', ()=>fileImport.click());
 document.getElementById('btnImportM').addEventListener('click', ()=>fileImport.click());
 fileImport.addEventListener('change', ()=>{
   if(fileImport.files[0]) importData(fileImport.files[0]);
   fileImport.value = '';
+});
+
+// Atajos de teclado: Escape cierra el modal; Ctrl/Cmd+Z deshace (fuera de campos de texto)
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape' && overlay.classList.contains('open')){ closeModal(); return; }
+  if((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey && !e.altKey){
+    const t = e.target;
+    if(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if(overlay.classList.contains('open')) return;
+    if(hayDeshacer()){ e.preventDefault(); deshacer(); }
+  }
 });
 
 /* ---------------- Aviso de respaldo ---------------- */
@@ -4402,6 +4490,7 @@ renderView();
 checkBackupReminder();
 setInterval(checkBackupReminder, 30 * 60 * 1000); // revisa cada 30 min mientras la app siga abierta
 initUIZoom();
+actualizarBotonDeshacer();
 const versionNoteEl = document.getElementById('versionNote');
 if(versionNoteEl) versionNoteEl.textContent = 'Versión ' + APP_VERSION;
 </script>
