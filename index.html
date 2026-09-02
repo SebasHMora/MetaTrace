@@ -335,6 +335,12 @@
   .import-opt{ display:block; text-align:left; height:auto; padding:12px 14px; white-space:normal; line-height:1.45; }
   .import-opt b{ display:block; margin-bottom:3px; color: var(--color-primary); font-family: var(--font-display); }
   .import-opt span{ display:block; font-weight:400; font-size:12px; color: var(--color-text-soft); }
+  .papelera-row{ display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 2px; border-bottom:1px solid var(--color-border); flex-wrap:wrap; }
+  .papelera-row:last-child{ border-bottom:none; }
+  .papelera-info{ display:flex; flex-direction:column; gap:2px; min-width:180px; }
+  .papelera-info b{ font-size:12.5px; color: var(--color-primary); }
+  .papelera-info span{ font-size:11px; color: var(--color-text-soft); }
+  .papelera-acciones{ display:flex; gap:6px; align-items:center; }
   .range-row{ display:flex; align-items:center; gap:12px; }
   .range-row input[type=range]{ flex:1; }
   .range-val{ font-family: var(--font-display); font-weight:700; color: var(--color-primary); font-size:14px; width:46px; text-align:right; }
@@ -605,7 +611,7 @@
       <button class="ghost-btn" id="btnCsv">🧾 Exportar a CSV</button>
       <button class="ghost-btn" id="btnImport">⬆ Importar respaldo (.json)</button>
       <input type="file" id="fileImport" accept="application/json" style="display:none">
-      <button class="ghost-btn" id="btnPapelera" style="display:none;">🗑 Papelera</button>
+      <button class="ghost-btn" id="btnPapelera">🗑 Papelera</button>
       <button class="ghost-btn" id="btnWipe" style="color:var(--color-rojo); border-color:#E7C6C1;">🧹 Vaciar todos los datos</button>
       <button class="ghost-btn" id="btnDeshacer" style="display:none;">↩ Deshacer lo último</button>
       <p class="storage-note">Los datos se guardan solo en este dispositivo, sin cifrar. Exporta un respaldo (.json) con frecuencia para no perderlos, y guárdalo/compártelo como archivo confidencial (ver Guía §8). Excel/CSV son para compartir o analizar, no reemplazan el respaldo.</p>
@@ -626,7 +632,7 @@
       <button class="btn btn-outline btn-sm" id="btnExcelM">Excel</button>
       <button class="btn btn-outline btn-sm" id="btnCsvM">CSV</button>
       <button class="btn btn-outline btn-sm" id="btnImportM">Importar</button>
-      <button class="btn btn-outline btn-sm" id="btnPapeleraM" style="display:none;">Papelera</button>
+      <button class="btn btn-outline btn-sm" id="btnPapeleraM">Papelera</button>
       <button class="btn btn-outline btn-sm" id="btnWipeM" style="color:var(--color-rojo);border-color:var(--color-rojo);">Vaciar</button>
       <button class="btn btn-outline btn-sm" id="btnDeshacerM" style="display:none;">↩ Deshacer</button>
       <button class="btn btn-outline btn-sm" id="btnZoomOutM" title="Reducir tamaño de letra">A−</button>
@@ -702,6 +708,12 @@ const Store = {
       if(!Array.isArray(this.data[k])) this.data[k] = [];
     });
     if(!this.data.perfil || typeof this.data.perfil !== 'object') this.data.perfil = { nombreOrganizacion:'', vision:'', mision:'' };
+    // Papelera: tolera ausencia y purga lo de más de 30 días
+    if(!Array.isArray(this.data._papelera)) this.data._papelera = [];
+    else {
+      const limite = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      this.data._papelera = this.data._papelera.filter(e => e && typeof e.fecha === 'number' && e.fecha >= limite);
+    }
   },
   save(){
     const ok = safeLSSet(STORAGE_KEY, JSON.stringify(this.data));
@@ -750,6 +762,7 @@ function deshacer(){
     if(typeof overlay !== 'undefined' && overlay.classList.contains('open')) closeModal();
     renderView();
     actualizarBotonDeshacer();
+    if(typeof actualizarBotonPapelera === 'function') actualizarBotonPapelera();
     showToast('Se deshizo: ' + u.label);
   }catch(e){ showToast('No se pudo deshacer ese cambio'); }
 }
@@ -3029,6 +3042,8 @@ function handleAction(action, id, idx){
     else showToast('El respaldo no traía nada que tú no tuvieras ya');
     return;
   }
+  if(action==='restaurar-papelera'){ restaurarDePapelera(id); return; }
+  if(action==='borrar-papelera'){ borrarDePapelera(id); return; }
   if(action==='limpiar-filtros'){
     if(tableState[id]){
       tableState[id].filtros = {};
@@ -3174,13 +3189,106 @@ function handleAction(action, id, idx){
 }
 
 function confirmDelete(coll, id, msg, extra){
-  if(confirm(msg)){
-    pushUndo('eliminación');
-    Store.remove(coll, id);
-    if(extra) extra();
-    renderView();
-    showToast('Eliminado', { accion:{ label:'Deshacer', fn: deshacer }, duracion: 6000 });
+  if(!confirm(msg)) return;
+  pushUndo('eliminación');
+  const last = undoStack[undoStack.length - 1];
+  const antes = last ? (()=>{ try{ return JSON.parse(last.snapshot); }catch(e){ return null; } })() : null;
+  const entidad = antes ? (antes[coll]||[]).find(x=>x.id===id) : null;
+  Store.remove(coll, id);
+  if(extra) extra();
+  if(antes && entidad) guardarEnPapelera(coll, entidad, antes);
+  Store.save();
+  renderView();
+  showToast('Eliminado', { accion:{ label:'Deshacer', fn: deshacer }, duracion: 6000 });
+}
+
+/* ---------------- Papelera (elementos borrados, recuperables 30 días) ---------------- */
+const PAPELERA_TIPO_LABEL = { objetivosGenerales:'Objetivo general', objetivosEspecificos:'Objetivo específico', proyectos:'Proyecto', actividades:'Actividad', responsables:'Responsable' };
+
+// Guarda en la papelera lo que quedó ausente tras un borrado (la entidad + su cascada).
+// No llama a Store.save() — de eso se encarga confirmDelete.
+function guardarEnPapelera(coll, entidad, antes){
+  try{
+    const datos = { objetivosGenerales:[], objetivosEspecificos:[], proyectos:[], actividades:[], responsables:[] };
+    let ligados = 0;
+    Object.keys(datos).forEach(k=>{
+      const ahoraIds = new Set((Store.data[k]||[]).map(x=>x && x.id));
+      (antes[k]||[]).forEach(item=>{
+        if(item && item.id && !ahoraIds.has(item.id)){
+          datos[k].push(item);
+          if(!(k===coll && item.id===entidad.id)) ligados++;
+        }
+      });
+    });
+    const nombre = entidad.nombre || '(sin nombre)';
+    const resumen = `${PAPELERA_TIPO_LABEL[coll] || coll}: «${nombre}»` + (ligados ? ` — y ${ligados} elemento(s) ligado(s)` : '');
+    if(!Array.isArray(Store.data._papelera)) Store.data._papelera = [];
+    Store.data._papelera.unshift({ id: uid('pap'), fecha: Date.now(), tipo: coll, resumen, datos });
+    if(Store.data._papelera.length > 50) Store.data._papelera.length = 50;
+    actualizarBotonPapelera();
+  }catch(e){ /* la papelera es un extra; si falla no debe romper el borrado */ }
+}
+
+function abrirPapelera(){ openModal(formPapelera()); }
+function refrescarPapelera(){
+  if(typeof overlay !== 'undefined' && overlay.classList.contains('open') && modal.querySelector('#papeleraLista')){
+    modal.innerHTML = formPapelera();
   }
+}
+function actualizarBotonPapelera(){
+  const n = Array.isArray(Store.data._papelera) ? Store.data._papelera.length : 0;
+  const txt = n ? `🗑 Papelera (${n})` : '🗑 Papelera';
+  const a = document.getElementById('btnPapelera'); if(a) a.textContent = txt;
+  const b = document.getElementById('btnPapeleraM'); if(b) b.textContent = n ? `Papelera (${n})` : 'Papelera';
+}
+
+function formPapelera(){
+  const items = (Store.data._papelera || []).slice().sort((a,b)=>b.fecha - a.fecha);
+  const fmtF = (ms)=>{ const d = new Date(ms); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; };
+  return `
+    <h2>Papelera</h2>
+    <p class="modal-sub">Lo que borras se guarda aquí 30 días por si necesitas recuperarlo. "Restaurar" vuelve a agregar el elemento (y lo que estaba ligado a él) sin tocar el resto de tus datos.</p>
+    <div id="papeleraLista">
+      ${ items.length ? items.map(e=>`
+        <div class="papelera-row">
+          <div class="papelera-info">
+            <b>${esc(e.resumen || '(elemento)')}</b>
+            <span>Eliminado el ${fmtF(e.fecha)}</span>
+          </div>
+          <div class="papelera-acciones">
+            <button type="button" class="btn btn-outline btn-sm" data-action="restaurar-papelera" data-id="${e.id}">Restaurar</button>
+            <button type="button" class="icon-btn" data-action="borrar-papelera" data-id="${e.id}" title="Eliminar definitivamente">🗑</button>
+          </div>
+        </div>`).join('') : `<div class="perfil-empty" style="padding:24px 0; text-align:center;">La papelera está vacía.</div>` }
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-text" data-action="close-modal">Cerrar</button>
+    </div>`;
+}
+
+function restaurarDePapelera(papId){
+  const lista = Store.data._papelera || [];
+  const idx = lista.findIndex(e=>e.id===papId);
+  if(idx < 0) return;
+  const entry = lista[idx];
+  pushUndo('restaurar de la papelera');
+  const r = mergeInto(Store.data, entry.datos || {});
+  lista.splice(idx, 1);
+  Store.save();
+  actualizarBotonPapelera();
+  renderView();
+  refrescarPapelera();
+  if(r.total) showToast(`Restaurado: ${r.total} elemento(s)`, { accion:{ label:'Deshacer', fn: deshacer }, duracion: 7000 });
+  else showToast('Ese elemento ya estaba en tus datos');
+}
+
+function borrarDePapelera(papId){
+  if(!confirm('¿Eliminar definitivamente este elemento de la papelera? Ya no se podrá recuperar.')) return;
+  Store.data._papelera = (Store.data._papelera || []).filter(e=>e.id!==papId);
+  Store.save();
+  actualizarBotonPapelera();
+  refrescarPapelera();
+  showToast('Eliminado de la papelera');
 }
 
 /* ---------------- Form submit (delegado) ---------------- */
@@ -4396,10 +4504,8 @@ document.getElementById('btnWipe').addEventListener('click', wipeAll);
 document.getElementById('btnWipeM').addEventListener('click', wipeAll);
 document.getElementById('btnDeshacer')?.addEventListener('click', deshacer);
 document.getElementById('btnDeshacerM')?.addEventListener('click', deshacer);
-if(typeof abrirPapelera === 'function'){
-  document.getElementById('btnPapelera')?.addEventListener('click', abrirPapelera);
-  document.getElementById('btnPapeleraM')?.addEventListener('click', abrirPapelera);
-}
+document.getElementById('btnPapelera')?.addEventListener('click', abrirPapelera);
+document.getElementById('btnPapeleraM')?.addEventListener('click', abrirPapelera);
 const fileImport = document.getElementById('fileImport');
 document.getElementById('btnImport').addEventListener('click', ()=>fileImport.click());
 document.getElementById('btnImportM').addEventListener('click', ()=>fileImport.click());
@@ -4553,6 +4659,7 @@ checkBackupReminder();
 setInterval(checkBackupReminder, 30 * 60 * 1000); // revisa cada 30 min mientras la app siga abierta
 initUIZoom();
 actualizarBotonDeshacer();
+actualizarBotonPapelera();
 const versionNoteEl = document.getElementById('versionNote');
 if(versionNoteEl) versionNoteEl.textContent = 'Versión ' + APP_VERSION;
 </script>
