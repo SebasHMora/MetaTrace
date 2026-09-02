@@ -63,19 +63,36 @@ function createWindow () {
 // botón "Importar respaldo" que ya existe.
 // --------------------------------------------------------------------------
 
-const BACKUPS_DIR = path.join(app.getPath('documents'), 'MetaTrace', 'Respaldos automáticos');
+const DEFAULT_BACKUPS_DIR = path.join(app.getPath('documents'), 'MetaTrace', 'Respaldos automáticos');
 const MAX_RESPALDOS = 20;
+
+// Config persistente de la app (por ahora solo la carpeta de respaldos elegida a mano).
+const archivoConfig = path.join(app.getPath('userData'), 'config-metatrace.json');
+function leerConfig() {
+  try { return JSON.parse(fs.readFileSync(archivoConfig, 'utf-8')) || {}; } catch (e) { return {}; }
+}
+function guardarConfig(cfg) {
+  try { fs.writeFileSync(archivoConfig, JSON.stringify(cfg, null, 2)); return true; } catch (e) { return false; }
+}
+
+// Carpeta donde se escriben los respaldos automáticos: la que la persona haya elegido
+// en Configuración, o la predeterminada dentro de Documentos.
+let BACKUPS_DIR = (() => {
+  const c = leerConfig().backupsDir;
+  return (c && typeof c === 'string') ? c : DEFAULT_BACKUPS_DIR;
+})();
 
 function asegurarCarpetaRespaldos() {
   try { fs.mkdirSync(BACKUPS_DIR, { recursive: true }); return true; } catch (e) { return false; }
 }
 
-function listarRespaldos() {
+function listarRespaldos(dir) {
+  const carpeta = dir || BACKUPS_DIR;
   try {
-    return fs.readdirSync(BACKUPS_DIR)
+    return fs.readdirSync(carpeta)
       .filter(n => /^metatrace_auto_[\w-]+\.json$/.test(n))
       .map(n => {
-        const st = fs.statSync(path.join(BACKUPS_DIR, n));
+        const st = fs.statSync(path.join(carpeta, n));
         return { name: n, mtime: st.mtimeMs, size: st.size };
       })
       .sort((a, b) => b.mtime - a.mtime);
@@ -139,6 +156,44 @@ ipcMain.handle('mt:readBackup', (_e, name) => {
 ipcMain.handle('mt:openFolder', () => {
   asegurarCarpetaRespaldos();
   shell.openPath(BACKUPS_DIR);
+});
+ipcMain.handle('mt:esCarpetaPredeterminada', () => BACKUPS_DIR === DEFAULT_BACKUPS_DIR);
+
+// Deja elegir a mano la carpeta de respaldos automáticos. Copia (mejor esfuerzo) los
+// respaldos que ya existían a la carpeta nueva, para que "Restaurar" siga viéndolos.
+ipcMain.handle('mt:elegirCarpetaRespaldos', async () => {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+  const opciones = {
+    title: 'Elegir carpeta para los respaldos automáticos',
+    properties: ['openDirectory', 'createDirectory'],
+    defaultPath: BACKUPS_DIR
+  };
+  const res = win ? await dialog.showOpenDialog(win, opciones) : await dialog.showOpenDialog(opciones);
+  if (res.canceled || !res.filePaths || !res.filePaths[0]) return { ok: false, dir: BACKUPS_DIR };
+  const elegida = res.filePaths[0];
+  try {
+    fs.mkdirSync(elegida, { recursive: true });
+    fs.accessSync(elegida, fs.constants.W_OK);
+  } catch (e) {
+    return { ok: false, error: 'no-escribible', dir: BACKUPS_DIR };
+  }
+  if (elegida !== BACKUPS_DIR) {
+    try {
+      for (const b of listarRespaldos(BACKUPS_DIR)) {
+        const destino = path.join(elegida, b.name);
+        if (!fs.existsSync(destino)) fs.copyFileSync(path.join(BACKUPS_DIR, b.name), destino);
+      }
+    } catch (e) { /* copiar es un extra; si falla no es crítico */ }
+  }
+  BACKUPS_DIR = elegida;
+  const cfg = leerConfig(); cfg.backupsDir = elegida; guardarConfig(cfg);
+  return { ok: true, dir: BACKUPS_DIR, predeterminada: BACKUPS_DIR === DEFAULT_BACKUPS_DIR };
+});
+
+ipcMain.handle('mt:usarCarpetaPredeterminada', () => {
+  BACKUPS_DIR = DEFAULT_BACKUPS_DIR;
+  const cfg = leerConfig(); delete cfg.backupsDir; guardarConfig(cfg);
+  return { ok: true, dir: BACKUPS_DIR };
 });
 
 // --------------------------------------------------------------------------

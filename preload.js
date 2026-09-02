@@ -10,4 +10,7 @@ contextBridge.exposeInMainWorld('metatrace', {
   listAutoBackups: () => ipcRenderer.invoke('mt:listBackups'),
   readAutoBackup: (name) => ipcRenderer.invoke('mt:readBackup', name),
   openBackupsFolder: () => ipcRenderer.invoke('mt:openFolder'),
+  esCarpetaPredeterminada: () => ipcRenderer.invoke('mt:esCarpetaPredeterminada'),
+  elegirCarpetaRespaldos: () => ipcRenderer.invoke('mt:elegirCarpetaRespaldos'),
+  usarCarpetaPredeterminada: () => ipcRenderer.invoke('mt:usarCarpetaPredeterminada'),
 });

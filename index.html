@@ -687,7 +687,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    ========================================================= */
 
 const STORAGE_KEY = 'cometa_data_v2';
-const APP_VERSION = '0.10.1'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
+const APP_VERSION = '0.10.2'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
 
 function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -1420,7 +1420,7 @@ function viewGuia(){
         <li><b>✅ Actividades</b> — el detalle operativo del día a día, con fechas, responsable, % de avance, estado y semáforo. El botón <b>"📋 Registrar avances en lote"</b> abre una tabla para actualizar el avance de varias actividades de un mismo proyecto, área o responsable de una sola vez — pensado para transcribir rápido lo que te devuelven en papel.</li>
         <li><b>👥 Responsables</b> — tu equipo: nombre, rol, área, organización y contacto.</li>
         <li><b>📝 Formatos</b> — descarga formatos en Word. Los de <b>seguimiento</b> (por proyecto completo, por área o por responsable) traen impreso lo que ya se sabe para que quien reporta solo llene los avances. Los de <b>alta</b> (proyecto nuevo / actividad nueva) son hojas en blanco con todos los campos necesarios, para que un área o responsable proponga algo nuevo en papel y tú luego lo captures en la app.</li>
-        <li><b>⚙️ Configuración</b> — todo lo relacionado con tus datos: exportar el respaldo (.json), exportar a Excel/CSV, importar un respaldo, restaurar de un respaldo automático, la Papelera y vaciar todos los datos. Cada opción trae una descripción de para qué sirve.</li>
+        <li><b>⚙️ Configuración</b> — todo lo relacionado con tus datos: exportar el respaldo (.json), exportar a Excel/CSV, importar un respaldo, restaurar de un respaldo automático, elegir la carpeta de los respaldos automáticos, la Papelera y vaciar todos los datos. Cada opción trae una descripción de para qué sirve.</li>
         <li><b>📘 Guía de uso</b> — esta misma página.</li>
         <li><b>📖 Glosario</b> — si te encuentras con un término que no conoces (TOC, línea base, etc.), lo explicamos ahí en palabras simples.</li>
         <li><b>ℹ️ Acerca de</b> — quién desarrolló MetaTrace y cómo se maneja tu información (aviso de privacidad).</li>
@@ -1473,7 +1473,7 @@ function viewGuia(){
         <li><b>Importar respaldo (.json)</b> — al elegir un archivo, MetaTrace te pregunta si quieres <b>reemplazar todo</b> con el respaldo o <b>combinarlo</b> con lo que ya tienes (agrega lo que falte, sin borrar nada). Combinar es útil cuando la sede junta los respaldos de varias personas o áreas.</li>
       </ul>
       <div class="guide-tip">💡 MetaTrace te va a recordar exportar el respaldo apenas hagas 3 cambios (agregar, editar, registrar avances...) sin haberlo hecho, o como respaldo si pasa más de un día sin que exportes — no lo ignores, el respaldo .json es la única forma segura de mover tu trabajo a otro computador.</div>
-      <div class="guide-tip">💾 Si usas MetaTrace instalada como app de escritorio, además guarda <b>respaldos automáticos</b> en tu carpeta Documentos ("MetaTrace / Respaldos automáticos"), cada 15 minutos y poco después de cada cambio (conserva los 20 más recientes). El botón "↻ Restaurar de un respaldo automático" en la pestaña ⚙️ Configuración te deja volver a uno de esos puntos. Es una red de seguridad, no un reemplazo del respaldo .json que tú exportas y guardas aparte.</div>
+      <div class="guide-tip">💾 Si usas MetaTrace instalada como app de escritorio, además guarda <b>respaldos automáticos</b> en tu carpeta Documentos ("MetaTrace / Respaldos automáticos"), cada 15 minutos y poco después de cada cambio (conserva los 20 más recientes). El botón "↻ Restaurar de un respaldo automático" en la pestaña ⚙️ Configuración te deja volver a uno de esos puntos. Es una red de seguridad, no un reemplazo del respaldo .json que tú exportas y guardas aparte. Desde ⚙️ Configuración puedes <b>cambiar la carpeta</b> donde se guardan; conviene elegir una que <b>no</b> se sincronice a la nube (OneDrive, iCloud Drive, Dropbox), porque el respaldo va en texto plano y quedaría copiado fuera de tu equipo.</div>
       <div class="guide-tip" style="border-left-color:#B5432E;">🔒 <b>El respaldo y las exportaciones contienen toda tu información en texto plano</b> — incluidos nombres de personas, casos y notas sensibles. Trátalos como un documento confidencial: si necesitas enviarlos (a la sede, a otra persona del equipo), no los mandes como adjunto normal de correo. Ponlos primero en un archivo comprimido <b>con contraseña</b> (ZIP/7z), y comparte esa contraseña por otro canal distinto (una llamada, un mensaje aparte). Guárdalos en una carpeta protegida, no en el Escritorio ni en una nube personal sin cifrar. Y activa el cifrado de disco de tu equipo (BitLocker en Windows, FileVault en Mac).</div>
     </div>
 
@@ -2952,8 +2952,18 @@ function viewConfiguracion(){
       ${hayAuto ? `
       <div class="config-item">
         <button class="ghost-btn" data-action="cfg-restaurar-auto">↻ Restaurar de un respaldo automático</button>
-        <p class="field-hint">Vuelve a uno de los puntos que MetaTrace guarda sola en tu carpeta de Documentos (cada 15 minutos y poco después de cada cambio; conserva los 20 más recientes). Es una red de seguridad, no reemplaza al respaldo .json que tú exportas aparte.</p>
-        <p class="field-hint" id="infoRespaldoAuto" style="margin-top:3px;"></p>
+        <p class="field-hint">Vuelve a uno de los puntos que MetaTrace guarda sola cada 15 minutos y poco después de cada cambio (conserva los 20 más recientes). Es una red de seguridad, no reemplaza al respaldo .json que tú exportas aparte.</p>
+      </div>
+
+      <div class="config-item">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <span style="font-size:13.5px; font-weight:600;">📁 Carpeta de los respaldos automáticos</span>
+          <button class="btn btn-outline btn-sm" data-action="cfg-elegir-carpeta">Cambiar carpeta…</button>
+          <button class="btn btn-outline btn-sm" data-action="cfg-abrir-carpeta">Abrir carpeta</button>
+          <button class="btn btn-text btn-sm" data-action="cfg-carpeta-predeterminada" style="display:none;">Volver a la predeterminada</button>
+        </div>
+        <p class="field-hint" id="infoRespaldoAuto" style="margin-top:7px;"></p>
+        <p class="field-hint">Elige dónde MetaTrace guarda sus copias automáticas. Evita carpetas que se sincronizan a la nube (OneDrive, iCloud Drive, Dropbox): el respaldo va en texto plano y quedaría copiado fuera de tu equipo. Al cambiarla, los respaldos que ya existían se copian a la carpeta nueva.</p>
       </div>` : ''}
 
       <div class="config-item">
@@ -2972,12 +2982,16 @@ function viewConfiguracion(){
 
 function poblarInfoRespaldoAuto(){
   const info = document.getElementById('infoRespaldoAuto');
-  if(!info) return;
-  if(!(window.metatrace && window.metatrace.backupsDir)){ info.style.display = 'none'; return; }
+  if(!info || !(window.metatrace && window.metatrace.backupsDir)) return;
   Promise.resolve(window.metatrace.backupsDir()).then(dir=>{
     if(dir){ info.textContent = '💾 Se guardan en: ' + dir; info.style.display = ''; }
-    else info.style.display = 'none';
-  }).catch(()=>{ info.style.display = 'none'; });
+  }).catch(()=>{});
+  const btnDef = document.querySelector('[data-action="cfg-carpeta-predeterminada"]');
+  if(btnDef && window.metatrace.esCarpetaPredeterminada){
+    Promise.resolve(window.metatrace.esCarpetaPredeterminada())
+      .then(es=>{ btnDef.style.display = es ? 'none' : ''; })
+      .catch(()=>{});
+  }
 }
 
 /* ---------------- Formatos de seguimiento ---------------- */
@@ -3411,6 +3425,20 @@ function handleAction(action, id, idx){
   if(action==='cfg-exportar-csv'){ exportCSV(); return; }
   if(action==='cfg-importar'){ const fi = document.getElementById('fileImport'); if(fi) fi.click(); return; }
   if(action==='cfg-restaurar-auto'){ abrirRestaurarAuto(); return; }
+  if(action==='cfg-elegir-carpeta'){
+    if(!(window.metatrace && window.metatrace.elegirCarpetaRespaldos)) return;
+    Promise.resolve(window.metatrace.elegirCarpetaRespaldos()).then(res=>{
+      if(res && res.ok){ showToast('Carpeta de respaldos actualizada'); renderView(); }
+      else if(res && res.error === 'no-escribible') showToast('No se puede escribir en esa carpeta. Elige otra.');
+    }).catch(()=>{});
+    return;
+  }
+  if(action==='cfg-abrir-carpeta'){ if(window.metatrace && window.metatrace.openBackupsFolder) window.metatrace.openBackupsFolder(); return; }
+  if(action==='cfg-carpeta-predeterminada'){
+    if(!(window.metatrace && window.metatrace.usarCarpetaPredeterminada)) return;
+    Promise.resolve(window.metatrace.usarCarpetaPredeterminada()).then(()=>{ showToast('Se usará la carpeta predeterminada'); renderView(); }).catch(()=>{});
+    return;
+  }
   if(action==='cfg-papelera'){ abrirPapelera(); return; }
   if(action==='cfg-wipe'){ wipeAll(); return; }
   if(action==='importar-reemplazar'){
