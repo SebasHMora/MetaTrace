@@ -1579,6 +1579,84 @@ function renderListaActividadesAlerta(acts, tipo){
   }).join('');
 }
 
+/* ---------------- Avance por periodo ----------------
+   Compara el % de avance de las actividades entre dos fechas usando el histórico. */
+let _periodoDesde = '', _periodoHasta = '';
+function abrirPeriodo(){
+  if(!_periodoHasta) _periodoHasta = todayISO();
+  if(!_periodoDesde){ const d = new Date(); d.setMonth(d.getMonth() - 6); _periodoDesde = d.toISOString().slice(0,10); }
+  openModal(formPeriodo());
+}
+// avance de la actividad "a la fecha f": última entrada de histórico con fecha <= f (0 si no hay)
+function avanceActividadAFecha(act, f){
+  const h = (Array.isArray(act.historial) ? act.historial : [])
+    .filter(e => e && e.fecha && e.fecha <= f)
+    .sort((x,y) => x.fecha.localeCompare(y.fecha));
+  return h.length ? (Number(h[h.length-1].avance) || 0) : 0;
+}
+function filasPeriodo(desde, hasta){
+  const proyMap = Object.fromEntries(Store.data.proyectos.map(p=>[p.id, p.nombre]));
+  const anteriorADesde = (()=>{ const d = new Date(desde + 'T00:00:00'); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
+  const filas = [];
+  Store.data.actividades.forEach(a=>{
+    const hist = Array.isArray(a.historial) ? a.historial : [];
+    const registros = hist.filter(e => e && e.fecha && e.fecha >= desde && e.fecha <= hasta).length;
+    const inicio = avanceActividadAFecha(a, anteriorADesde);
+    const fin = avanceActividadAFecha(a, hasta);
+    const delta = fin - inicio;
+    if(registros === 0 && delta === 0) return;
+    filas.push({ nombre: a.nombre || '(sin nombre)', proy: proyMap[a.proyectoId] || '—', inicio, fin, delta, registros });
+  });
+  filas.sort((x,y)=> x.proy.localeCompare(y.proy,'es') || (y.delta - x.delta));
+  return filas;
+}
+function renderPeriodoResultado(desde, hasta){
+  if(!desde || !hasta) return `<p class="chart-empty">Elige las dos fechas y pulsa "Calcular".</p>`;
+  if(desde > hasta) return `<p class="chart-empty">La fecha "Desde" no puede ser posterior a "Hasta".</p>`;
+  const filas = filasPeriodo(desde, hasta);
+  if(!filas.length) return `<p class="chart-empty">Ninguna actividad registró avance entre esas fechas.</p>`;
+  const prom = Math.round(filas.reduce((s,f)=>s+f.delta,0) / filas.length);
+  const sig = (n)=> n>0 ? `<span style="color:var(--color-verde);">+${n}</span>` : (n<0 ? `<span style="color:var(--color-rojo);">${n}</span>` : '0');
+  return `
+    <p style="font-size:12.5px; margin-bottom:8px;"><b>${filas.length}</b> actividad(es) con movimiento en el periodo · cambio neto promedio: <b>${prom>0?'+':''}${prom} puntos</b></p>
+    <div class="table-wrap table-scroll"><table><thead><tr><th>Proyecto</th><th>Actividad</th><th>Inicio</th><th>Fin</th><th>Cambio</th></tr></thead><tbody>
+      ${filas.map(f=>`<tr><td><div class="cell-sub" style="margin:0;">${esc(f.proy)}</div></td><td>${esc(f.nombre)}</td><td>${f.inicio}%</td><td>${f.fin}%</td><td><b>${sig(f.delta)} pts</b></td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="margin-top:10px;"><button type="button" class="btn btn-outline btn-sm" data-action="copiar-periodo">📋 Copiar tabla</button></div>`;
+}
+function formPeriodo(){
+  return `
+    <h2>Avance por periodo</h2>
+    <p class="modal-sub">Compara el % de avance de tus actividades entre dos fechas, a partir del histórico de "Registrar avance". Útil para un informe trimestral o semestral.</p>
+    <div class="field field-row">
+      <div><label>Desde</label><input type="date" id="periodoDesde" value="${esc(_periodoDesde)}"></div>
+      <div><label>Hasta</label><input type="date" id="periodoHasta" value="${esc(_periodoHasta)}"></div>
+    </div>
+    <button type="button" class="btn btn-accent btn-sm" data-action="calcular-periodo">Calcular</button>
+    <div id="periodoResultado" style="margin-top:16px;">${renderPeriodoResultado(_periodoDesde, _periodoHasta)}</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-text" data-action="close-modal">Cerrar</button>
+    </div>`;
+}
+function copiarTablaPeriodo(desde, hasta){
+  const filas = filasPeriodo(desde, hasta);
+  const lineas = filas.map(f=>`${f.proy}\t${f.nombre}\t${f.inicio}%\t${f.fin}%\t${f.delta>0?'+':''}${f.delta} pts`);
+  const texto = `Avance por periodo: ${fmtDate(desde)} a ${fmtDate(hasta)}\n\nProyecto\tActividad\tInicio\tFin\tCambio\n` + lineas.join('\n');
+  const fallback = ()=>{
+    const cont = document.getElementById('periodoResultado');
+    if(!cont) return;
+    let ta = cont.querySelector('textarea.periodo-copia');
+    if(!ta){ ta = document.createElement('textarea'); ta.className = 'periodo-copia'; ta.readOnly = true; ta.style.cssText = 'width:100%;height:130px;margin-top:8px;font-size:11px;'; cont.appendChild(ta); }
+    ta.value = texto; ta.focus(); ta.select();
+    showToast('Selecciona y copia el texto (Ctrl/Cmd+C)');
+  };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(texto).then(()=>showToast('Tabla copiada al portapapeles'), fallback);
+    } else { fallback(); }
+  }catch(e){ fallback(); }
+}
+
 function viewDashboard(){
   const acts = Store.data.actividades;
   const proyectos = Store.data.proyectos;
@@ -1605,6 +1683,7 @@ function viewDashboard(){
         <h1>Panel general</h1>
         <p>Vista rápida del estado de tu Teoría de Cambio y de la ejecución de tus proyectos.</p>
       </div>
+      <button class="btn btn-outline btn-sm" data-action="abrir-periodo">📅 Avance por periodo</button>
     </div>
 
     <div class="kpi-row">
@@ -3052,6 +3131,15 @@ function handleAction(action, id, idx){
   if(action==='onboarding-cero'){ empezarDeCero(); return; }
   if(action==='ver-introduccion'){ mostrarBienvenida(true); return; }
   if(action==='borrar-ejemplo'){ borrarEjemploYEmpezar(); return; }
+  if(action==='abrir-periodo'){ abrirPeriodo(); return; }
+  if(action==='calcular-periodo'){
+    _periodoDesde = document.getElementById('periodoDesde')?.value || '';
+    _periodoHasta = document.getElementById('periodoHasta')?.value || '';
+    const cont = document.getElementById('periodoResultado');
+    if(cont) cont.innerHTML = renderPeriodoResultado(_periodoDesde, _periodoHasta);
+    return;
+  }
+  if(action==='copiar-periodo'){ copiarTablaPeriodo(_periodoDesde, _periodoHasta); return; }
   if(action==='limpiar-filtros'){
     if(tableState[id]){
       tableState[id].filtros = {};
