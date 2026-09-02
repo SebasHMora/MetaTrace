@@ -110,6 +110,7 @@
   .nav-btn .ico{ width:20px; text-align:center; font-size:15px; }
   .nav-btn:hover{ background: var(--color-primary-soft); color: var(--color-text); }
   .nav-btn.active{ background: var(--color-primary-soft); color: var(--color-primary); font-weight:700; border-left-color: var(--color-secondary); }
+  .nav-sep{ height:1px; background: var(--color-border); margin:7px 10px; }
 
   .sidebar-footer{ display:flex; flex-direction:column; gap:6px; padding-top: 14px; border-top: 1px solid var(--color-border); }
   .ghost-btn{
@@ -117,6 +118,15 @@
     padding: 8px 10px; border-radius: var(--radius-s); font-size: 12.5px; cursor:pointer; text-align:left;
   }
   .ghost-btn:hover{ background: var(--color-primary-soft); color: var(--color-text); }
+
+  /* Pestaña Configuración */
+  .config-list{ display:flex; flex-direction:column; gap:4px; max-width:620px; }
+  .config-item{ padding:14px 0; border-bottom:1px solid var(--color-border); }
+  .config-item:last-child{ border-bottom:none; }
+  .config-item .ghost-btn{ font-size:13.5px; padding:9px 12px; }
+  .config-item .field-hint{ margin-top:7px; }
+  .config-item-peligro{ margin-top:6px; }
+  .config-item-peligro .ghost-btn:hover{ background:#F7E9E6; color:var(--color-rojo); }
   .storage-note{ font-size: 10.5px; color: var(--color-text-soft); line-height:1.4; padding: 2px 2px 0; }
   .credit-note{ font-size: 10.5px; color: var(--color-text-soft); line-height:1.4; padding: 6px 2px 0; }
   .credit-note b{ color: var(--color-primary); font-family: var(--font-display); }
@@ -570,7 +580,6 @@
   .about-credit{ margin-top:24px; padding-top:18px; border-top:1px solid var(--color-border); text-align:center; font-size:12px; color: var(--color-text-soft); }
   .about-credit b{ color: var(--color-primary); font-family: var(--font-display); }
   .about-version{ font-size:11px; color: var(--color-text-soft); margin-top:6px; }
-  .about-disclaimer{ font-size:10.5px; color: var(--color-text-soft); margin-top:10px; line-height:1.5; max-width:480px; margin-left:auto; margin-right:auto; }
   .about-licencias{ font-size:10px; color: var(--color-text-soft); margin-top:14px; line-height:1.5; max-width:520px; margin-left:auto; margin-right:auto; }
   .about-licencias code{ font-size:9.5px; background: var(--color-surface-alt); padding:1px 4px; border-radius:3px; }
 
@@ -600,6 +609,7 @@
     .brand{ border-bottom:none; padding: 0 12px 0 0; margin-bottom:0; margin-right:8px; }
     .nav{ flex-direction:row; overflow-x:auto; }
     .nav-btn{ white-space:nowrap; }
+    .nav-sep{ width:1px; height:auto; align-self:stretch; margin:4px 4px; flex:none; }
     .sidebar-footer{ display:none; }
     main{ padding: 20px 16px 50px; }
     .field-row{ grid-template-columns: 1fr; }
@@ -621,18 +631,10 @@
     </div>
     <nav class="nav" id="nav"></nav>
     <div class="sidebar-footer">
-      <button class="ghost-btn" id="btnExport">⬇ Exportar respaldo (.json)</button>
-      <button class="ghost-btn" id="btnExcel">📊 Exportar a Excel (.xlsx)</button>
-      <button class="ghost-btn" id="btnCsv">🧾 Exportar a CSV</button>
-      <button class="ghost-btn" id="btnImport">⬆ Importar respaldo (.json)</button>
-      <input type="file" id="fileImport" accept="application/json" style="display:none">
-      <button class="ghost-btn" id="btnRestaurarAuto" style="display:none;">↻ Restaurar de un respaldo automático</button>
-      <button class="ghost-btn" id="btnPapelera">🗑 Papelera</button>
-      <button class="ghost-btn" id="btnWipe" style="color:var(--color-rojo); border-color:#E7C6C1;">🧹 Vaciar todos los datos</button>
       <button class="ghost-btn" id="btnDeshacer" style="display:none;">↩ Deshacer lo último</button>
+      <input type="file" id="fileImport" accept="application/json" style="display:none">
       <p class="storage-note">Los datos se guardan solo en este dispositivo, sin cifrar. Exporta un respaldo (.json) con frecuencia para no perderlos, y guárdalo/compártelo como archivo confidencial (ver Guía §8). Excel/CSV son para compartir o analizar, no reemplazan el respaldo.</p>
-      <p class="storage-note" id="infoRespaldoAuto" style="display:none;"></p>
-      <p class="credit-note"><b>Desarrollado por Colectivo META (COMETA). Todos los derechos reservados, 2026.</b></p>
+      <p class="credit-note">Desarrollado por Colectivo META (COMETA). 2026.</p>
       <p class="version-note" id="versionNote"></p>
       <div class="zoom-control">
         <button class="zoom-btn" id="btnZoomOut" title="Reducir tamaño de letra">A−</button>
@@ -646,12 +648,6 @@
     <div id="backupBanner" class="backup-banner" style="display:none;"></div>
     <div id="ejemploBanner" class="backup-banner ejemplo-banner" style="display:none;"></div>
     <div class="mobile-tools">
-      <button class="btn btn-outline btn-sm" id="btnExportM">Respaldo</button>
-      <button class="btn btn-outline btn-sm" id="btnExcelM">Excel</button>
-      <button class="btn btn-outline btn-sm" id="btnCsvM">CSV</button>
-      <button class="btn btn-outline btn-sm" id="btnImportM">Importar</button>
-      <button class="btn btn-outline btn-sm" id="btnPapeleraM">Papelera</button>
-      <button class="btn btn-outline btn-sm" id="btnWipeM" style="color:var(--color-rojo);border-color:var(--color-rojo);">Vaciar</button>
       <button class="btn btn-outline btn-sm" id="btnDeshacerM" style="display:none;">↩ Deshacer</button>
       <button class="btn btn-outline btn-sm" id="btnZoomOutM" title="Reducir tamaño de letra">A−</button>
       <button class="btn btn-outline btn-sm" id="btnZoomInM" title="Aumentar tamaño de letra">A+</button>
@@ -691,7 +687,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    ========================================================= */
 
 const STORAGE_KEY = 'cometa_data_v2';
-const APP_VERSION = '0.10.0'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
+const APP_VERSION = '0.10.1'; // única fuente de verdad — se muestra en la barra lateral y en "Acerca de"
 
 function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -1317,6 +1313,7 @@ const SECTIONS = [
   { id:'actividades',  label:'Actividades',      ico:'✅' },
   { id:'responsables', label:'Responsables',     ico:'👥' },
   { id:'formatos',     label:'Formatos',         ico:'📝' },
+  { id:'configuracion',label:'Configuración',    ico:'⚙️', sep:true },
   { id:'guia',         label:'Guía de uso',      ico:'📘' },
   { id:'glosario',     label:'Glosario',         ico:'📖' },
   { id:'acerca',       label:'Acerca de',        ico:'ℹ️' },
@@ -1326,6 +1323,7 @@ let currentSection = 'dashboard';
 function renderNav(){
   const nav = document.getElementById('nav');
   nav.innerHTML = SECTIONS.map(s=>`
+    ${s.sep ? '<div class="nav-sep"></div>' : ''}
     <button class="nav-btn ${s.id===currentSection?'active':''}" data-section="${s.id}">
       <span class="ico">${s.ico}</span>${s.label}
     </button>`).join('');
@@ -1342,6 +1340,7 @@ function renderView(){
   else if(currentSection === 'actividades') view.innerHTML = viewActividades();
   else if(currentSection === 'responsables') view.innerHTML = viewResponsables();
   else if(currentSection === 'formatos') view.innerHTML = viewFormatos();
+  else if(currentSection === 'configuracion'){ view.innerHTML = viewConfiguracion(); poblarInfoRespaldoAuto(); }
   else if(currentSection === 'guia') view.innerHTML = viewGuia();
   else if(currentSection === 'glosario') view.innerHTML = viewGlosario();
   else if(currentSection === 'acerca') view.innerHTML = viewAcercaDe();
@@ -1421,6 +1420,7 @@ function viewGuia(){
         <li><b>✅ Actividades</b> — el detalle operativo del día a día, con fechas, responsable, % de avance, estado y semáforo. El botón <b>"📋 Registrar avances en lote"</b> abre una tabla para actualizar el avance de varias actividades de un mismo proyecto, área o responsable de una sola vez — pensado para transcribir rápido lo que te devuelven en papel.</li>
         <li><b>👥 Responsables</b> — tu equipo: nombre, rol, área, organización y contacto.</li>
         <li><b>📝 Formatos</b> — descarga formatos en Word. Los de <b>seguimiento</b> (por proyecto completo, por área o por responsable) traen impreso lo que ya se sabe para que quien reporta solo llene los avances. Los de <b>alta</b> (proyecto nuevo / actividad nueva) son hojas en blanco con todos los campos necesarios, para que un área o responsable proponga algo nuevo en papel y tú luego lo captures en la app.</li>
+        <li><b>⚙️ Configuración</b> — todo lo relacionado con tus datos: exportar el respaldo (.json), exportar a Excel/CSV, importar un respaldo, restaurar de un respaldo automático, la Papelera y vaciar todos los datos. Cada opción trae una descripción de para qué sirve.</li>
         <li><b>📘 Guía de uso</b> — esta misma página.</li>
         <li><b>📖 Glosario</b> — si te encuentras con un término que no conoces (TOC, línea base, etc.), lo explicamos ahí en palabras simples.</li>
         <li><b>ℹ️ Acerca de</b> — quién desarrolló MetaTrace y cómo se maneja tu información (aviso de privacidad).</li>
@@ -1465,7 +1465,7 @@ function viewGuia(){
 
     <div class="guide-section" id="g-exportar">
       <h2>💾 8. Exportar y respaldar tu información</h2>
-      <p>Como todos tus datos se guardan solo en este dispositivo, es importante exportar un respaldo con frecuencia. En la barra lateral tienes estas opciones:</p>
+      <p>Como todos tus datos se guardan solo en este dispositivo, es importante exportar un respaldo con frecuencia. En la pestaña <b>⚙️ Configuración</b> tienes estas opciones:</p>
       <ul class="guide-list">
         <li><b>Exportar respaldo (.json)</b> — la copia completa para no perder tu información. Es la única que puedes volver a importar después.</li>
         <li><b>Exportar a Excel (.xlsx)</b> — un archivo con todas tus tablas en hojas separadas, para compartir o analizar.</li>
@@ -1473,7 +1473,7 @@ function viewGuia(){
         <li><b>Importar respaldo (.json)</b> — al elegir un archivo, MetaTrace te pregunta si quieres <b>reemplazar todo</b> con el respaldo o <b>combinarlo</b> con lo que ya tienes (agrega lo que falte, sin borrar nada). Combinar es útil cuando la sede junta los respaldos de varias personas o áreas.</li>
       </ul>
       <div class="guide-tip">💡 MetaTrace te va a recordar exportar el respaldo apenas hagas 3 cambios (agregar, editar, registrar avances...) sin haberlo hecho, o como respaldo si pasa más de un día sin que exportes — no lo ignores, el respaldo .json es la única forma segura de mover tu trabajo a otro computador.</div>
-      <div class="guide-tip">💾 Si usas MetaTrace instalada como app de escritorio, además guarda <b>respaldos automáticos</b> en tu carpeta Documentos ("MetaTrace / Respaldos automáticos"), cada 15 minutos y poco después de cada cambio (conserva los 20 más recientes). El botón "↻ Restaurar de un respaldo automático" en la barra lateral te deja volver a uno de esos puntos. Es una red de seguridad, no un reemplazo del respaldo .json que tú exportas y guardas aparte.</div>
+      <div class="guide-tip">💾 Si usas MetaTrace instalada como app de escritorio, además guarda <b>respaldos automáticos</b> en tu carpeta Documentos ("MetaTrace / Respaldos automáticos"), cada 15 minutos y poco después de cada cambio (conserva los 20 más recientes). El botón "↻ Restaurar de un respaldo automático" en la pestaña ⚙️ Configuración te deja volver a uno de esos puntos. Es una red de seguridad, no un reemplazo del respaldo .json que tú exportas y guardas aparte.</div>
       <div class="guide-tip" style="border-left-color:#B5432E;">🔒 <b>El respaldo y las exportaciones contienen toda tu información en texto plano</b> — incluidos nombres de personas, casos y notas sensibles. Trátalos como un documento confidencial: si necesitas enviarlos (a la sede, a otra persona del equipo), no los mandes como adjunto normal de correo. Ponlos primero en un archivo comprimido <b>con contraseña</b> (ZIP/7z), y comparte esa contraseña por otro canal distinto (una llamada, un mensaje aparte). Guárdalos en una carpeta protegida, no en el Escritorio ni en una nube personal sin cifrar. Y activa el cifrado de disco de tu equipo (BitLocker en Windows, FileVault en Mac).</div>
     </div>
 
@@ -1491,8 +1491,8 @@ function viewGuia(){
         <li><b>Instalar MetaTrace como app</b> — en algunas versiones publicadas de MetaTrace, el navegador te puede ofrecer instalarla como una app de escritorio o de celular, con su propio ícono, sin depender de abrir el archivo cada vez.</li>
         <li><b>Aviso de nueva versión disponible</b> — si usas MetaTrace instalada como app de escritorio (.dmg / .exe), al abrirla revisa en segundo plano si hay una versión más nueva publicada. Si la hay, te avisa con un mensaje y te ofrece abrir la página de descarga en GitHub — nunca se actualiza sola, tú decides si instalar la nueva versión o seguir usando la actual. Esta revisión solo consulta el número de versión más reciente; no envía ningún dato tuyo ni de tu organización, así que no compromete en nada la privacidad de tu información — sigue guardándose exclusivamente en este dispositivo, igual que siempre.</li>
         <li><b>Deshacer</b> — si borras algo por error (una actividad, un proyecto, o hasta un objetivo general con todo lo que cuelga de él), aparece un botón "↩ Deshacer lo último" en la barra lateral, y también funciona con Ctrl/Cmd+Z. Revierte los últimos cambios destructivos mientras la app siga abierta.</li>
-        <li><b>Papelera</b> — lo que borras se guarda ahí 30 días. Desde el botón "🗑 Papelera" puedes restaurar un elemento (vuelve con todo lo que estaba ligado a él) sin tocar el resto de tus datos.</li>
-        <li><b>Vaciar todos los datos</b> — borra por completo la información guardada en este dispositivo. Úsalo con cuidado; siempre exporta un respaldo antes (aunque también se puede deshacer mientras la app siga abierta).</li>
+        <li><b>Papelera</b> — lo que borras se guarda ahí 30 días. Desde la pestaña ⚙️ Configuración, el botón "🗑 Papelera" te deja restaurar un elemento (vuelve con todo lo que estaba ligado a él) sin tocar el resto de tus datos.</li>
+        <li><b>Vaciar todos los datos</b> — en la pestaña ⚙️ Configuración; borra por completo la información guardada en este dispositivo. Úsalo con cuidado; siempre exporta un respaldo antes (aunque también se puede deshacer mientras la app siga abierta).</li>
       </ul>
       <p>¿Te encontraste con una palabra que no entendiste? Revisa la pestaña <b>📖 Glosario</b> — ahí explicamos en lenguaje simple todos los términos de MEL que usa MetaTrace. Y si quieres saber quién está detrás de esta herramienta o cómo se maneja tu privacidad, revisa <b>ℹ️ Acerca de</b>.</p>
     </div>
@@ -1532,7 +1532,7 @@ const GLOSARIO_TERMINOS = [
   { t:'Área responsable', d:'El área o programa interno de tu organización a cargo de una actividad (ej. "Educación", "Salud", "Incidencia"), distinto del "Responsable", que es la persona específica encargada.' },
   { t:'Carga de trabajo', d:'En el Panel general, el resumen de cuántas actividades tiene encima cada responsable (persona) y cada área, con su mezcla de semáforos y su % de avance promedio. Sirve para ver de un vistazo quién o qué área está saturada o con muchos pendientes retrasados. Cada fila lleva directo a la lista de Actividades ya filtrada por ese responsable o esa área.' },
   { t:'Formato de alta', d:'Una hoja en blanco descargable en Word (desde la pestaña Formatos) con todos los campos necesarios para proponer un proyecto nuevo o una actividad nueva. La llena a mano quien lo propone y el equipo MEL la usa para capturar el nuevo registro en la app. Se distingue de los formatos de seguimiento, que sirven para reportar avances de lo que ya existe.' },
-  { t:'Papelera', d:'Cuando borras un objetivo, proyecto, actividad o responsable, no desaparece del todo: se guarda en la Papelera durante 30 días junto con todo lo que estaba ligado a él. Desde el botón "🗑 Papelera" de la barra lateral puedes restaurarlo (vuelve completo, sin afectar el resto de tus datos) o eliminarlo definitivamente.' },
+  { t:'Papelera', d:'Cuando borras un objetivo, proyecto, actividad o responsable, no desaparece del todo: se guarda en la Papelera durante 30 días junto con todo lo que estaba ligado a él. Desde el botón "🗑 Papelera" de la pestaña ⚙️ Configuración puedes restaurarlo (vuelve completo, sin afectar el resto de tus datos) o eliminarlo definitivamente.' },
   { t:'Deshacer', d:'Una red de seguridad para las acciones que borran o reemplazan datos. Después de borrar algo (o vaciar todo, o importar reemplazando), aparece un botón "↩ Deshacer lo último" en la barra lateral — y también funciona con Ctrl/Cmd+Z. Revierte los últimos cambios mientras la app siga abierta; para recuperar algo más viejo están la Papelera y los respaldos.' },
   { t:'Respaldo automático', d:'Solo en la versión de escritorio: MetaTrace guarda copias de tus datos en tu carpeta Documentos ("MetaTrace / Respaldos automáticos"), cada 15 minutos y poco después de cada cambio, conservando las 20 más recientes. Es una red de seguridad interna; no reemplaza al respaldo .json que tú exportas y guardas por tu cuenta.' },
   { t:'Combinar (al importar)', d:'Al importar un respaldo, la opción "Combinar" agrega a tus datos actuales lo que el respaldo traiga y tú no tengas todavía, sin borrar nada; si un elemento existe en los dos, se conserva tu versión. Útil cuando la sede junta los respaldos de varias personas. La otra opción, "Reemplazar todo", cambia por completo tus datos por los del respaldo.' },
@@ -1593,9 +1593,8 @@ function viewAcercaDe(){
       </div>
       <p>MetaTrace se sigue mejorando de forma continua. Si tienes dudas sobre un término, revisa el <b>Glosario</b>; si necesitas ayuda para usar la herramienta, revisa la <b>Guía de uso</b>.</p>
       <div class="about-credit">
-        <b>Desarrollado por Colectivo META (COMETA). Todos los derechos reservados, 2026.</b>
+        Desarrollado por Colectivo META (COMETA). 2026.
         <div class="about-version">MetaTrace — Versión ${APP_VERSION}</div>
-        <div class="about-disclaimer">Se prohíbe la reproducción parcial o total de este software, así como su alteración, distribución o venta sin la autorización expresa y por escrito de Colectivo META (COMETA).</div>
         <div class="about-licencias">
           MetaTrace se apoya en componentes de código abierto de terceros:
           <b>Electron</b> y el motor <b>Chromium</b>/<b>Node.js</b> que incluye (licencia MIT y licencias BSD relacionadas),
@@ -2916,6 +2915,71 @@ function viewResponsables(){
   `;
 }
 
+/* ---------------- Configuración (respaldos, importar, papelera, vaciar) ---------------- */
+function viewConfiguracion(){
+  const hayAuto = hayRespaldoAutoDisponible();
+  const nPap = Array.isArray(Store.data._papelera) ? Store.data._papelera.length : 0;
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Configuración</h1>
+        <p>Respaldos, importación y limpieza de datos. Todo lo que registras vive solo en este dispositivo, así que exportar tu respaldo con frecuencia es lo que evita perderlo.</p>
+      </div>
+    </div>
+
+    <div class="config-list">
+
+      <div class="config-item">
+        <button class="ghost-btn" data-action="cfg-exportar-json">⬇ Exportar respaldo (.json)</button>
+        <p class="field-hint">La copia completa de toda tu información. Es la única que puedes volver a importar después. Guárdala como archivo confidencial y expórtala con frecuencia.</p>
+      </div>
+
+      <div class="config-item">
+        <button class="ghost-btn" data-action="cfg-exportar-excel">📊 Exportar a Excel (.xlsx)</button>
+        <p class="field-hint">Todas tus tablas en hojas separadas de una hoja de cálculo, para compartir o analizar. No sirve para restaurar: no reemplaza al respaldo .json.</p>
+      </div>
+
+      <div class="config-item">
+        <button class="ghost-btn" data-action="cfg-exportar-csv">🧾 Exportar a CSV</button>
+        <p class="field-hint">Lo mismo que Excel, pero en un archivo de texto separado por cada tabla.</p>
+      </div>
+
+      <div class="config-item">
+        <button class="ghost-btn" data-action="cfg-importar">⬆ Importar respaldo (.json)</button>
+        <p class="field-hint">Carga un archivo .json que exportaste antes. MetaTrace te pregunta si reemplazar todo o combinarlo con lo que ya tienes (agrega lo que falte, sin borrar nada).</p>
+      </div>
+
+      ${hayAuto ? `
+      <div class="config-item">
+        <button class="ghost-btn" data-action="cfg-restaurar-auto">↻ Restaurar de un respaldo automático</button>
+        <p class="field-hint">Vuelve a uno de los puntos que MetaTrace guarda sola en tu carpeta de Documentos (cada 15 minutos y poco después de cada cambio; conserva los 20 más recientes). Es una red de seguridad, no reemplaza al respaldo .json que tú exportas aparte.</p>
+        <p class="field-hint" id="infoRespaldoAuto" style="margin-top:3px;"></p>
+      </div>` : ''}
+
+      <div class="config-item">
+        <button class="ghost-btn" data-action="cfg-papelera">${nPap ? `🗑 Papelera (${nPap})` : '🗑 Papelera'}</button>
+        <p class="field-hint">Lo que borras se guarda aquí 30 días. Puedes restaurar un elemento —vuelve con todo lo que estaba ligado a él— o eliminarlo definitivamente.</p>
+      </div>
+
+      <div class="config-item config-item-peligro">
+        <button class="ghost-btn" data-action="cfg-wipe" style="color:var(--color-rojo); border-color:#E7C6C1;">🧹 Vaciar todos los datos</button>
+        <p class="field-hint">Borra por completo la información guardada en este dispositivo. Exporta un respaldo antes. Se puede deshacer mientras la app siga abierta.</p>
+      </div>
+
+    </div>
+  `;
+}
+
+function poblarInfoRespaldoAuto(){
+  const info = document.getElementById('infoRespaldoAuto');
+  if(!info) return;
+  if(!(window.metatrace && window.metatrace.backupsDir)){ info.style.display = 'none'; return; }
+  Promise.resolve(window.metatrace.backupsDir()).then(dir=>{
+    if(dir){ info.textContent = '💾 Se guardan en: ' + dir; info.style.display = ''; }
+    else info.style.display = 'none';
+  }).catch(()=>{ info.style.display = 'none'; });
+}
+
 /* ---------------- Formatos de seguimiento ---------------- */
 let formatoTipoSeleccionado = 'proyecto';
 let formatoIncluirCompletadas = false;
@@ -3342,6 +3406,13 @@ document.addEventListener('input', (e)=>{
 
 function handleAction(action, id, idx){
   if(action==='ir-actividades-sin-resultado'){ currentSection='actividades'; renderNav(); renderView(); return; }
+  if(action==='cfg-exportar-json'){ exportData(); return; }
+  if(action==='cfg-exportar-excel'){ exportExcel(); return; }
+  if(action==='cfg-exportar-csv'){ exportCSV(); return; }
+  if(action==='cfg-importar'){ const fi = document.getElementById('fileImport'); if(fi) fi.click(); return; }
+  if(action==='cfg-restaurar-auto'){ abrirRestaurarAuto(); return; }
+  if(action==='cfg-papelera'){ abrirPapelera(); return; }
+  if(action==='cfg-wipe'){ wipeAll(); return; }
   if(action==='importar-reemplazar'){
     if(!_importPendiente){ closeModal(); return; }
     pushUndo('importar (reemplazar todo)');
@@ -3643,8 +3714,7 @@ function refrescarPapelera(){
 function actualizarBotonPapelera(){
   const n = Array.isArray(Store.data._papelera) ? Store.data._papelera.length : 0;
   const txt = n ? `🗑 Papelera (${n})` : '🗑 Papelera';
-  const a = document.getElementById('btnPapelera'); if(a) a.textContent = txt;
-  const b = document.getElementById('btnPapeleraM'); if(b) b.textContent = n ? `Papelera (${n})` : 'Papelera';
+  const c = document.querySelector('[data-action="cfg-papelera"]'); if(c) c.textContent = txt;
 }
 
 function formPapelera(){
@@ -4950,31 +5020,12 @@ function exportCSV(){
   showToast('Descargando archivos CSV...');
 }
 
-document.getElementById('btnExport').addEventListener('click', exportData);
-document.getElementById('btnExportM').addEventListener('click', exportData);
-document.getElementById('btnExcel').addEventListener('click', exportExcel);
-document.getElementById('btnExcelM').addEventListener('click', exportExcel);
-document.getElementById('btnCsv').addEventListener('click', exportCSV);
-document.getElementById('btnCsvM').addEventListener('click', exportCSV);
-document.getElementById('btnWipe').addEventListener('click', wipeAll);
-document.getElementById('btnWipeM').addEventListener('click', wipeAll);
+// Los botones de exportar / importar / respaldo automático / papelera / vaciar viven
+// ahora en la pestaña Configuración y se enlazan por delegación (data-action) en handleAction().
+// Aquí solo queda el "Deshacer" de la barra lateral y móvil, y el input de archivo oculto.
 document.getElementById('btnDeshacer')?.addEventListener('click', deshacer);
 document.getElementById('btnDeshacerM')?.addEventListener('click', deshacer);
-document.getElementById('btnPapelera')?.addEventListener('click', abrirPapelera);
-document.getElementById('btnPapeleraM')?.addEventListener('click', abrirPapelera);
-if(hayRespaldoAutoDisponible()){
-  const bra = document.getElementById('btnRestaurarAuto');
-  if(bra){ bra.style.display = ''; bra.addEventListener('click', abrirRestaurarAuto); }
-  const info = document.getElementById('infoRespaldoAuto');
-  if(info && window.metatrace.backupsDir){
-    Promise.resolve(window.metatrace.backupsDir()).then(dir=>{
-      if(dir){ info.textContent = '💾 Respaldos automáticos guardados en: ' + dir; info.style.display = ''; }
-    }).catch(()=>{});
-  }
-}
 const fileImport = document.getElementById('fileImport');
-document.getElementById('btnImport').addEventListener('click', ()=>fileImport.click());
-document.getElementById('btnImportM').addEventListener('click', ()=>fileImport.click());
 fileImport.addEventListener('change', ()=>{
   if(fileImport.files[0]) importData(fileImport.files[0]);
   fileImport.value = '';
