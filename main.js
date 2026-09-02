@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, dialog, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -26,12 +26,20 @@ function createWindow () {
       // Node. Por eso mantenemos Node fuera del render y aislamos el contexto:
       // así, si algún día se colara un XSS (p. ej. al importar un respaldo
       // manipulado), no podría tocar el sistema de archivos ni ejecutar comandos.
+      // El preload expone únicamente un puente acotado para los respaldos.
+      preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true
     }
   });
   win.loadFile('index.html');
+
+  // Respaldo automático a disco: una vez ~60 s después de abrir y luego cada 15 min.
+  // Nunca bloquea ni interrumpe la app (todo va en try/catch dentro).
+  setTimeout(() => respaldoAutomatico(win), 60 * 1000);
+  const backupTimer = setInterval(() => respaldoAutomatico(win), 15 * 60 * 1000);
+  win.on('closed', () => clearInterval(backupTimer));
 
   // La ventana principal nunca debe salir de index.html.
   win.webContents.on('will-navigate', (e, url) => {
@@ -48,6 +56,90 @@ function createWindow () {
     return { action: 'deny' };
   });
 }
+
+// --------------------------------------------------------------------------
+// Respaldos automáticos a disco. Carpeta visible en Documentos para que la
+// persona usuaria pueda encontrarlos y, si hace falta, restaurar uno con el
+// botón "Importar respaldo" que ya existe.
+// --------------------------------------------------------------------------
+
+const BACKUPS_DIR = path.join(app.getPath('documents'), 'MetaTrace', 'Respaldos automáticos');
+const MAX_RESPALDOS = 20;
+
+function asegurarCarpetaRespaldos() {
+  try { fs.mkdirSync(BACKUPS_DIR, { recursive: true }); return true; } catch (e) { return false; }
+}
+
+function listarRespaldos() {
+  try {
+    return fs.readdirSync(BACKUPS_DIR)
+      .filter(n => /^metatrace_auto_[\w-]+\.json$/.test(n))
+      .map(n => {
+        const st = fs.statSync(path.join(BACKUPS_DIR, n));
+        return { name: n, mtime: st.mtimeMs, size: st.size };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+  } catch (e) { return []; }
+}
+
+function escribirRespaldo(jsonString) {
+  try {
+    if (!jsonString || typeof jsonString !== 'string') return null;
+    let datos;
+    try { datos = JSON.parse(jsonString); } catch (e) { return null; }
+    const hayAlgo = datos && (
+      (datos.objetivosGenerales || []).length || (datos.objetivosEspecificos || []).length ||
+      (datos.proyectos || []).length || (datos.actividades || []).length || (datos.responsables || []).length
+    );
+    if (!hayAlgo) return null;
+    if (!asegurarCarpetaRespaldos()) return null;
+
+    const previos = listarRespaldos();
+    if (previos.length) {
+      try {
+        const ultimo = fs.readFileSync(path.join(BACKUPS_DIR, previos[0].name), 'utf-8');
+        if (ultimo === jsonString) return null; // idéntico al más reciente: no duplicar
+      } catch (e) { /* si no se puede leer, seguimos y escribimos igual */ }
+    }
+
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    const nombre = `metatrace_auto_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.json`;
+    fs.writeFileSync(path.join(BACKUPS_DIR, nombre), jsonString);
+
+    listarRespaldos().slice(MAX_RESPALDOS).forEach(f => {
+      try { fs.unlinkSync(path.join(BACKUPS_DIR, f.name)); } catch (e) { /* ignora */ }
+    });
+    return nombre;
+  } catch (e) {
+    console.error('No se pudo escribir el respaldo automático', e);
+    return null;
+  }
+}
+
+async function respaldoAutomatico(win) {
+  try {
+    if (!win || win.isDestroyed()) return;
+    const json = await win.webContents.executeJavaScript(
+      '(function(){ try { return localStorage.getItem("cometa_data_v2"); } catch(e){ return null; } })()'
+    );
+    escribirRespaldo(json);
+  } catch (e) { /* nunca romper la app por un respaldo */ }
+}
+
+ipcMain.handle('mt:backupsDir', () => BACKUPS_DIR);
+ipcMain.handle('mt:backupNow', (_e, json) => escribirRespaldo(json));
+ipcMain.handle('mt:listBackups', () => listarRespaldos());
+ipcMain.handle('mt:readBackup', (_e, name) => {
+  try {
+    if (typeof name !== 'string' || !/^metatrace_auto_[\w-]+\.json$/.test(name)) return null;
+    return fs.readFileSync(path.join(BACKUPS_DIR, name), 'utf-8');
+  } catch (e) { return null; }
+});
+ipcMain.handle('mt:openFolder', () => {
+  asegurarCarpetaRespaldos();
+  shell.openPath(BACKUPS_DIR);
+});
 
 // --------------------------------------------------------------------------
 // Revisor de actualizaciones (Opción B): solo avisa, nunca reemplaza nada solo.

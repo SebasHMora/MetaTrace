@@ -10,6 +10,8 @@ module.exports = {
     // de copyright y el texto de las licencias de SheetJS, electron-squirrel-startup
     // y Electron. Ver también el hook postPackage de abajo.
     extraResource: ['./THIRD-PARTY-LICENSES.txt'],
+    // No incluir en la app material que solo sirve para desarrollo/pruebas.
+    ignore: [/^\/demo($|\/)/, /^\/\.github($|\/)/, /^\/_harness_tmp\.js$/],
   },
   rebuildConfig: {},
   makers: [

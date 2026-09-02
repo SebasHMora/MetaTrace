@@ -614,10 +614,12 @@
       <button class="ghost-btn" id="btnCsv">🧾 Exportar a CSV</button>
       <button class="ghost-btn" id="btnImport">⬆ Importar respaldo (.json)</button>
       <input type="file" id="fileImport" accept="application/json" style="display:none">
+      <button class="ghost-btn" id="btnRestaurarAuto" style="display:none;">↻ Restaurar de un respaldo automático</button>
       <button class="ghost-btn" id="btnPapelera">🗑 Papelera</button>
       <button class="ghost-btn" id="btnWipe" style="color:var(--color-rojo); border-color:#E7C6C1;">🧹 Vaciar todos los datos</button>
       <button class="ghost-btn" id="btnDeshacer" style="display:none;">↩ Deshacer lo último</button>
       <p class="storage-note">Los datos se guardan solo en este dispositivo, sin cifrar. Exporta un respaldo (.json) con frecuencia para no perderlos, y guárdalo/compártelo como archivo confidencial (ver Guía §8). Excel/CSV son para compartir o analizar, no reemplazan el respaldo.</p>
+      <p class="storage-note" id="infoRespaldoAuto" style="display:none;"></p>
       <p class="credit-note"><b>Desarrollado por Colectivo META (COMETA). Todos los derechos reservados, 2026.</b></p>
       <p class="version-note" id="versionNote"></p>
       <div class="zoom-control">
@@ -729,6 +731,7 @@ const Store = {
     ocultarErrorAlmacenamiento();
     incrementarCambiosDesdeRespaldo();
     checkBackupReminder();
+    programarRespaldoAuto();
   },
   add(coll, obj){ obj.id = uid(); this.data[coll].push(obj); this.save(); return obj; },
   update(coll, id, patch){
@@ -775,6 +778,18 @@ function actualizarBotonDeshacer(){
   const disp = hayDeshacer() ? '' : 'none';
   const a = document.getElementById('btnDeshacer'); if(a) a.style.display = disp;
   const b = document.getElementById('btnDeshacerM'); if(b) b.style.display = disp;
+}
+
+/* Respaldo automático a disco (solo en la app de escritorio). El proceso principal
+   también hace uno cada 15 min; este, con retraso, captura los cambios recientes. */
+let _respaldoAutoTimer = null;
+function hayRespaldoAutoDisponible(){ return !!(window.metatrace && window.metatrace.isDesktop && window.metatrace.backupNow); }
+function programarRespaldoAuto(){
+  if(!hayRespaldoAutoDisponible()) return;
+  clearTimeout(_respaldoAutoTimer);
+  _respaldoAutoTimer = setTimeout(()=>{
+    try{ window.metatrace.backupNow(JSON.stringify(Store.data)); }catch(e){}
+  }, 120 * 1000);
 }
 
 /* ---------------- Semáforo de actividades (actividades / proyectos) ---------------- */
@@ -3218,6 +3233,20 @@ function handleAction(action, id, idx){
   }
   if(action==='restaurar-papelera'){ restaurarDePapelera(id); return; }
   if(action==='borrar-papelera'){ borrarDePapelera(id); return; }
+  if(action==='restaurar-auto'){
+    if(!(window.metatrace && window.metatrace.readAutoBackup)){ closeModal(); return; }
+    Promise.resolve(window.metatrace.readAutoBackup(id)).then(contenido=>{
+      if(!contenido){ showToast('No se pudo leer ese respaldo'); return; }
+      try{
+        const parsed = JSON.parse(contenido);
+        ['objetivosGenerales','objetivosEspecificos','proyectos','actividades','responsables'].forEach(k=>{ if(!Array.isArray(parsed[k])) parsed[k]=[]; });
+        if(!parsed.perfil || typeof parsed.perfil !== 'object') parsed.perfil = { nombreOrganizacion:'', vision:'', mision:'' };
+        _importPendiente = parsed;
+        openModal(formImportarOpciones(parsed));
+      }catch(e){ showToast('Ese respaldo automático no es un archivo válido'); }
+    }).catch(()=>{ showToast('No se pudo leer ese respaldo'); });
+    return;
+  }
   if(action==='onboarding-ejemplo'){ cargarDatosEjemplo(); return; }
   if(action==='onboarding-cero'){ empezarDeCero(); return; }
   if(action==='ver-introduccion'){ mostrarBienvenida(true); return; }
@@ -3441,6 +3470,28 @@ function guardarEnPapelera(coll, entidad, antes){
     if(Store.data._papelera.length > 50) Store.data._papelera.length = 50;
     actualizarBotonPapelera();
   }catch(e){ /* la papelera es un extra; si falla no debe romper el borrado */ }
+}
+
+/* ---------------- Restaurar desde un respaldo automático (solo escritorio) ---------------- */
+function abrirRestaurarAuto(){
+  if(!(window.metatrace && window.metatrace.isDesktop && window.metatrace.listAutoBackups)) return;
+  Promise.resolve(window.metatrace.listAutoBackups()).then(lista=>{
+    openModal(formRestaurarAuto(Array.isArray(lista) ? lista : []));
+  }).catch(()=>{ openModal(formRestaurarAuto([])); });
+}
+function formRestaurarAuto(lista){
+  const fmt = (ms)=>{ const d=new Date(ms); const p=n=>String(n).padStart(2,'0'); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  return `
+    <h2>Restaurar desde un respaldo automático</h2>
+    <p class="modal-sub">MetaTrace guarda copias automáticas de tus datos en tu carpeta Documentos. Elige una para volver a ese punto — se abrirá el diálogo de importar para que decidas reemplazar o combinar.</p>
+    ${ lista.length ? `<div>${lista.map(b=>`
+      <div class="papelera-row">
+        <div class="papelera-info"><b>${fmt(b.mtime)}</b><span>${esc(b.name)} · ${Math.max(1, Math.round((b.size||0)/1024))} KB</span></div>
+        <div class="papelera-acciones"><button type="button" class="btn btn-outline btn-sm" data-action="restaurar-auto" data-id="${esc(b.name)}">Usar este</button></div>
+      </div>`).join('')}</div>` : `<div class="perfil-empty" style="padding:22px 0; text-align:center;">Todavía no hay respaldos automáticos. Se crean solos mientras usas la app.</div>` }
+    <div class="modal-actions">
+      <button type="button" class="btn btn-text" data-action="close-modal">Cerrar</button>
+    </div>`;
 }
 
 function abrirPapelera(){ openModal(formPapelera()); }
@@ -4720,6 +4771,16 @@ document.getElementById('btnDeshacer')?.addEventListener('click', deshacer);
 document.getElementById('btnDeshacerM')?.addEventListener('click', deshacer);
 document.getElementById('btnPapelera')?.addEventListener('click', abrirPapelera);
 document.getElementById('btnPapeleraM')?.addEventListener('click', abrirPapelera);
+if(hayRespaldoAutoDisponible()){
+  const bra = document.getElementById('btnRestaurarAuto');
+  if(bra){ bra.style.display = ''; bra.addEventListener('click', abrirRestaurarAuto); }
+  const info = document.getElementById('infoRespaldoAuto');
+  if(info && window.metatrace.backupsDir){
+    Promise.resolve(window.metatrace.backupsDir()).then(dir=>{
+      if(dir){ info.textContent = '💾 Respaldos automáticos guardados en: ' + dir; info.style.display = ''; }
+    }).catch(()=>{});
+  }
+}
 const fileImport = document.getElementById('fileImport');
 document.getElementById('btnImport').addEventListener('click', ()=>fileImport.click());
 document.getElementById('btnImportM').addEventListener('click', ()=>fileImport.click());
