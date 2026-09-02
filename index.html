@@ -332,6 +332,9 @@
   .field textarea{ resize: vertical; min-height: 64px; }
   .field-row{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
   .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top: 20px; padding-top:16px; border-top:1px solid var(--color-border); }
+  .import-opt{ display:block; text-align:left; height:auto; padding:12px 14px; white-space:normal; line-height:1.45; }
+  .import-opt b{ display:block; margin-bottom:3px; color: var(--color-primary); font-family: var(--font-display); }
+  .import-opt span{ display:block; font-weight:400; font-size:12px; color: var(--color-text-soft); }
   .range-row{ display:flex; align-items:center; gap:12px; }
   .range-row input[type=range]{ flex:1; }
   .range-val{ font-family: var(--font-display); font-weight:700; color: var(--color-primary); font-size:14px; width:46px; text-align:right; }
@@ -3003,6 +3006,29 @@ document.addEventListener('input', (e)=>{
 
 function handleAction(action, id, idx){
   if(action==='ir-actividades-sin-resultado'){ currentSection='actividades'; renderNav(); renderView(); return; }
+  if(action==='importar-reemplazar'){
+    if(!_importPendiente){ closeModal(); return; }
+    pushUndo('importar (reemplazar todo)');
+    const nuevo = _importPendiente; _importPendiente = null;
+    nuevo._papelera = Array.isArray(nuevo._papelera) ? nuevo._papelera : [];
+    Store.data = nuevo;
+    Store.save();
+    resetCambiosDesdeRespaldo();
+    closeModal(); renderView();
+    showToast('Datos reemplazados con el respaldo', { accion:{ label:'Deshacer', fn: deshacer }, duracion: 8000 });
+    return;
+  }
+  if(action==='importar-combinar'){
+    if(!_importPendiente){ closeModal(); return; }
+    pushUndo('importar (combinar)');
+    const r = mergeInto(Store.data, _importPendiente);
+    _importPendiente = null;
+    Store.save();
+    closeModal(); renderView();
+    if(r.total) showToast(`Se agregaron ${r.total} elemento(s) del respaldo`, { accion:{ label:'Deshacer', fn: deshacer }, duracion: 8000 });
+    else showToast('El respaldo no traía nada que tú no tuvieras ya');
+    return;
+  }
   if(action==='limpiar-filtros'){
     if(tableState[id]){
       tableState[id].filtros = {};
@@ -3351,6 +3377,29 @@ function exportData(){
   ocultarBackupBanner();
   showToast('Respaldo descargado');
 }
+// Combina "incoming" dentro de "target" SIN borrar nada: agrega los elementos cuyo id no exista
+// ya en target (en colisión de id se conserva la versión de target). Devuelve { total, agregados }.
+// Lo usan: importar en modo "combinar" y restaurar desde la Papelera.
+function mergeInto(target, incoming){
+  const resumen = { total: 0, agregados: {} };
+  ['objetivosGenerales','objetivosEspecificos','proyectos','actividades','responsables'].forEach(k=>{
+    const dest = Array.isArray(target[k]) ? target[k] : (target[k] = []);
+    const src = Array.isArray(incoming[k]) ? incoming[k] : [];
+    const ids = new Set(dest.map(x=>x && x.id));
+    let n = 0;
+    src.forEach(item=>{
+      if(item && item.id && !ids.has(item.id)){ dest.push(item); ids.add(item.id); n++; }
+    });
+    if(n){ resumen.agregados[k] = n; resumen.total += n; }
+  });
+  if(incoming.perfil && typeof incoming.perfil === 'object'){
+    if(!target.perfil || typeof target.perfil !== 'object') target.perfil = { nombreOrganizacion:'', vision:'', mision:'' };
+    ['nombreOrganizacion','vision','mision'].forEach(c=>{ if(!target.perfil[c] && incoming.perfil[c]) target.perfil[c] = incoming.perfil[c]; });
+  }
+  return resumen;
+}
+
+let _importPendiente = null;
 function importData(file){
   const reader = new FileReader();
   reader.onload = (e)=>{
@@ -3359,19 +3408,32 @@ function importData(file){
       ['objetivosGenerales','objetivosEspecificos','proyectos','actividades','responsables'].forEach(k=>{
         if(!Array.isArray(parsed[k])) parsed[k] = [];
       });
-      if(!parsed.perfil || typeof parsed.perfil !== 'object') parsed.perfil = { vision:'', mision:'' };
-      if(confirm('Importar reemplazará los datos actuales de este dispositivo. ¿Continuar?')){
-        Store.data = parsed;
-        Store.save();
-        resetCambiosDesdeRespaldo();
-        renderView();
-        showToast('Datos importados correctamente');
-      }
+      if(!parsed.perfil || typeof parsed.perfil !== 'object') parsed.perfil = { nombreOrganizacion:'', vision:'', mision:'' };
+      _importPendiente = parsed;
+      openModal(formImportarOpciones(parsed));
     }catch(err){
       alert('El archivo no es un respaldo válido de MetaTrace.');
     }
   };
   reader.readAsText(file);
+}
+
+function formImportarOpciones(parsed){
+  const n = (k)=> Array.isArray(parsed[k]) ? parsed[k].length : 0;
+  return `
+    <h2>Importar respaldo</h2>
+    <p class="modal-sub">El archivo trae ${n('objetivosGenerales')} objetivo(s) general(es), ${n('proyectos')} proyecto(s), ${n('actividades')} actividad(es) y ${n('responsables')} responsable(s). ¿Cómo quieres importarlo?</p>
+    <div style="display:flex; flex-direction:column; gap:10px; margin:14px 0;">
+      <button type="button" class="btn btn-outline import-opt" data-action="importar-combinar">
+        <b>➕ Combinar con lo que ya tengo</b><span>Agrega lo que el respaldo traiga y tú no tengas todavía. No borra nada de lo actual. Si algo existe en los dos, se queda tu versión.</span>
+      </button>
+      <button type="button" class="btn btn-outline import-opt" data-action="importar-reemplazar" style="border-color:#E7C6C1;">
+        <b>♻ Reemplazar todo</b><span>Borra lo que tienes ahora en este dispositivo y lo cambia por el contenido del respaldo. Podrás deshacerlo mientras la app siga abierta.</span>
+      </button>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-text" data-action="close-modal">Cancelar</button>
+    </div>`;
 }
 function wipeAll(){
   if(confirm('Esto eliminará TODOS los datos guardados en este dispositivo. ¿Deseas continuar?')){
