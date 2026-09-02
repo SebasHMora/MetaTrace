@@ -1344,7 +1344,8 @@ function viewGuia(){
 
     <div class="guide-section" id="g-primeros-pasos">
       <h2>🚀 2. Primeros pasos: cómo empezar</h2>
-      <p>Si estás abriendo MetaTrace por primera vez, sigue este orden — cada paso depende un poco del anterior:</p>
+      <p>La primera vez que abres MetaTrace te preguntamos si quieres <b>explorar con datos de ejemplo</b> (una organización ficticia, para ver cómo se ve todo lleno) o <b>empezar de cero</b>. Si cargaste el ejemplo, cuando quieras trabajar en serio usa el botón "Borrar ejemplo y empezar" del aviso superior. Puedes volver a ver esta introducción con el botón "Ver introducción" de la pestaña "Acerca de".</p>
+      <p>Para empezar de cero, sigue este orden — cada paso depende un poco del anterior:</p>
       <ol class="guide-steps">
         <li class="guide-step">
           <span class="guide-step-num">1</span>
@@ -1372,10 +1373,10 @@ function viewGuia(){
     <div class="guide-section" id="g-pestanas">
       <h2>🗂️ 3. Qué hay en cada pestaña</h2>
       <ul class="guide-list">
-        <li><b>📊 Panel general</b> — el resumen visual: actividades retrasadas o próximas a vencer, gráficas de avance (proyectos, actividades, y su tendencia en el tiempo), y la carga de trabajo de tu equipo, vista de dos formas: por responsable (persona) y por área responsable.</li>
+        <li><b>📊 Panel general</b> — el resumen visual: actividades retrasadas o próximas a vencer, gráficas de avance (proyectos, actividades, y su tendencia en el tiempo), y la carga de trabajo de tu equipo, vista de dos formas: por responsable (persona) y por área responsable. El botón <b>"📅 Avance por periodo"</b> te muestra cuánto avanzó cada actividad entre dos fechas — útil para un informe trimestral o semestral.</li>
         <li><b>🧭 Mi TOC</b> — la Teoría de Cambio de tu organización: nombre de la organización, visión, misión, objetivos generales y sus objetivos específicos. Es el punto de partida del que se desprende todo lo demás.</li>
         <li><b>🗂️ Proyectos</b> — la lista de tus proyectos, con su objetivo específico, responsable, financiamiento, fechas, sus resultados y ambos semáforos (de ejecución y de indicadores).</li>
-        <li><b>✅ Actividades</b> — el detalle operativo del día a día, con fechas, responsable, % de avance, estado y semáforo.</li>
+        <li><b>✅ Actividades</b> — el detalle operativo del día a día, con fechas, responsable, % de avance, estado y semáforo. El botón <b>"📋 Registrar avances en lote"</b> abre una tabla para actualizar el avance de varias actividades de un mismo proyecto, área o responsable de una sola vez — pensado para transcribir rápido lo que te devuelven en papel.</li>
         <li><b>👥 Responsables</b> — tu equipo: nombre, rol, área, organización y contacto.</li>
         <li><b>📝 Formatos</b> — descarga formatos en Word. Los de <b>seguimiento</b> (por proyecto completo, por área o por responsable) traen impreso lo que ya se sabe para que quien reporta solo llene los avances. Los de <b>alta</b> (proyecto nuevo / actividad nueva) son hojas en blanco con todos los campos necesarios, para que un área o responsable proponga algo nuevo en papel y tú luego lo captures en la app.</li>
         <li><b>📘 Guía de uso</b> — esta misma página.</li>
@@ -1408,7 +1409,8 @@ function viewGuia(){
     <div class="guide-section" id="g-historico">
       <h2>📈 6. Registrar avance en el tiempo</h2>
       <p>No tienes que editar el proyecto o la actividad completa cada vez que quieras actualizar un dato. Usa el botón <b>"📈 Registrar avance"</b> — aparece directamente en la lista de Actividades, y también en la lista de Proyectos (si el proyecto tiene varios indicadores entre todos sus resultados, primero te pregunta a cuál le vas a registrar el avance). Ahí eliges la fecha, el nuevo valor, una nota opcional y quién lo está registrando.</p>
-      <p>Cada registro queda guardado en un histórico fechado, así que con el tiempo puedes ver la evolución completa (ej. "en mayo íbamos al 30%, en agosto al 55%") y no solo el dato más reciente. Con esos registros, el Panel general arma además una gráfica de tendencia de avance mes a mes.</p>
+      <p>Cada registro queda guardado en un histórico fechado, así que con el tiempo puedes ver la evolución completa (ej. "en mayo íbamos al 30%, en agosto al 55%") y no solo el dato más reciente. Con esos registros, el Panel general arma además una gráfica de tendencia de avance mes a mes, y el botón "📅 Avance por periodo" calcula cuánto cambió cada actividad entre dos fechas.</p>
+      <p>Si tienes que capturar muchos avances de una vez (por ejemplo, lo que un área te devolvió en papel), usa <b>"📋 Registrar avances en lote"</b> en la pestaña Actividades: eliges el proyecto, área o responsable, y llenas una sola tabla con los valores nuevos.</p>
       <div class="guide-tip">💡 El % de avance de una actividad y su Estado (Pendiente/Terminado) están sincronizados: si llega al 100% se marca Terminado solo, y si baja de 100% vuelve a Pendiente — no necesitas actualizar los dos por separado.</div>
     </div>
 
@@ -1421,13 +1423,15 @@ function viewGuia(){
 
     <div class="guide-section" id="g-exportar">
       <h2>💾 8. Exportar y respaldar tu información</h2>
-      <p>Como todos tus datos se guardan solo en este dispositivo, es importante exportar un respaldo con frecuencia. En la barra lateral tienes tres opciones:</p>
+      <p>Como todos tus datos se guardan solo en este dispositivo, es importante exportar un respaldo con frecuencia. En la barra lateral tienes estas opciones:</p>
       <ul class="guide-list">
         <li><b>Exportar respaldo (.json)</b> — la copia completa para no perder tu información. Es la única que puedes volver a importar después.</li>
         <li><b>Exportar a Excel (.xlsx)</b> — un archivo con todas tus tablas en hojas separadas, para compartir o analizar.</li>
         <li><b>Exportar a CSV</b> — lo mismo, pero en archivos separados por tabla.</li>
+        <li><b>Importar respaldo (.json)</b> — al elegir un archivo, MetaTrace te pregunta si quieres <b>reemplazar todo</b> con el respaldo o <b>combinarlo</b> con lo que ya tienes (agrega lo que falte, sin borrar nada). Combinar es útil cuando la sede junta los respaldos de varias personas o áreas.</li>
       </ul>
-      <div class="guide-tip">💡 MetaTrace te va a recordar exportar el respaldo apenas hagas 3 cambios (agregar, editar, registrar avances...) sin haberlo hecho, o como respaldo si pasa más de un día sin que exportes — no lo ignores, es la única forma de no perder tu trabajo si cambias de computador.</div>
+      <div class="guide-tip">💡 MetaTrace te va a recordar exportar el respaldo apenas hagas 3 cambios (agregar, editar, registrar avances...) sin haberlo hecho, o como respaldo si pasa más de un día sin que exportes — no lo ignores, el respaldo .json es la única forma segura de mover tu trabajo a otro computador.</div>
+      <div class="guide-tip">💾 Si usas MetaTrace instalada como app de escritorio, además guarda <b>respaldos automáticos</b> en tu carpeta Documentos ("MetaTrace / Respaldos automáticos"), cada 15 minutos y poco después de cada cambio (conserva los 20 más recientes). El botón "↻ Restaurar de un respaldo automático" en la barra lateral te deja volver a uno de esos puntos. Es una red de seguridad, no un reemplazo del respaldo .json que tú exportas y guardas aparte.</div>
       <div class="guide-tip" style="border-left-color:#B5432E;">🔒 <b>El respaldo y las exportaciones contienen toda tu información en texto plano</b> — incluidos nombres de personas, casos y notas sensibles. Trátalos como un documento confidencial: si necesitas enviarlos (a la sede, a otra persona del equipo), no los mandes como adjunto normal de correo. Ponlos primero en un archivo comprimido <b>con contraseña</b> (ZIP/7z), y comparte esa contraseña por otro canal distinto (una llamada, un mensaje aparte). Guárdalos en una carpeta protegida, no en el Escritorio ni en una nube personal sin cifrar. Y activa el cifrado de disco de tu equipo (BitLocker en Windows, FileVault en Mac).</div>
     </div>
 
@@ -1443,7 +1447,9 @@ function viewGuia(){
         <li><b>Tamaño de letra</b> — con los botones "A−" y "A+" al final de la barra lateral puedes agrandar o achicar toda la interfaz.</li>
         <li><b>Instalar MetaTrace como app</b> — en algunas versiones publicadas de MetaTrace, el navegador te puede ofrecer instalarla como una app de escritorio o de celular, con su propio ícono, sin depender de abrir el archivo cada vez.</li>
         <li><b>Aviso de nueva versión disponible</b> — si usas MetaTrace instalada como app de escritorio (.dmg / .exe), al abrirla revisa en segundo plano si hay una versión más nueva publicada. Si la hay, te avisa con un mensaje y te ofrece abrir la página de descarga en GitHub — nunca se actualiza sola, tú decides si instalar la nueva versión o seguir usando la actual. Esta revisión solo consulta el número de versión más reciente; no envía ningún dato tuyo ni de tu organización, así que no compromete en nada la privacidad de tu información — sigue guardándose exclusivamente en este dispositivo, igual que siempre.</li>
-        <li><b>Vaciar todos los datos</b> — borra por completo la información guardada en este dispositivo. Úsalo con cuidado; siempre exporta un respaldo antes.</li>
+        <li><b>Deshacer</b> — si borras algo por error (una actividad, un proyecto, o hasta un objetivo general con todo lo que cuelga de él), aparece un botón "↩ Deshacer lo último" en la barra lateral, y también funciona con Ctrl/Cmd+Z. Revierte los últimos cambios destructivos mientras la app siga abierta.</li>
+        <li><b>Papelera</b> — lo que borras se guarda ahí 30 días. Desde el botón "🗑 Papelera" puedes restaurar un elemento (vuelve con todo lo que estaba ligado a él) sin tocar el resto de tus datos.</li>
+        <li><b>Vaciar todos los datos</b> — borra por completo la información guardada en este dispositivo. Úsalo con cuidado; siempre exporta un respaldo antes (aunque también se puede deshacer mientras la app siga abierta).</li>
       </ul>
       <p>¿Te encontraste con una palabra que no entendiste? Revisa la pestaña <b>📖 Glosario</b> — ahí explicamos en lenguaje simple todos los términos de MEL que usa MetaTrace. Y si quieres saber quién está detrás de esta herramienta o cómo se maneja tu privacidad, revisa <b>ℹ️ Acerca de</b>.</p>
     </div>
@@ -1482,6 +1488,11 @@ const GLOSARIO_TERMINOS = [
   { t:'Área responsable', d:'El área o programa interno de tu organización a cargo de una actividad (ej. "Educación", "Salud", "Incidencia"), distinto del "Responsable", que es la persona específica encargada.' },
   { t:'Carga de trabajo', d:'En el Panel general, el resumen de cuántas actividades tiene encima cada responsable (persona) y cada área, con su mezcla de semáforos y su % de avance promedio. Sirve para ver de un vistazo quién o qué área está saturada o con muchos pendientes retrasados. Cada fila lleva directo a la lista de Actividades ya filtrada por ese responsable o esa área.' },
   { t:'Formato de alta', d:'Una hoja en blanco descargable en Word (desde la pestaña Formatos) con todos los campos necesarios para proponer un proyecto nuevo o una actividad nueva. La llena a mano quien lo propone y el equipo MEL la usa para capturar el nuevo registro en la app. Se distingue de los formatos de seguimiento, que sirven para reportar avances de lo que ya existe.' },
+  { t:'Papelera', d:'Cuando borras un objetivo, proyecto, actividad o responsable, no desaparece del todo: se guarda en la Papelera durante 30 días junto con todo lo que estaba ligado a él. Desde el botón "🗑 Papelera" de la barra lateral puedes restaurarlo (vuelve completo, sin afectar el resto de tus datos) o eliminarlo definitivamente.' },
+  { t:'Deshacer', d:'Una red de seguridad para las acciones que borran o reemplazan datos. Después de borrar algo (o vaciar todo, o importar reemplazando), aparece un botón "↩ Deshacer lo último" en la barra lateral — y también funciona con Ctrl/Cmd+Z. Revierte los últimos cambios mientras la app siga abierta; para recuperar algo más viejo están la Papelera y los respaldos.' },
+  { t:'Respaldo automático', d:'Solo en la versión de escritorio: MetaTrace guarda copias de tus datos en tu carpeta Documentos ("MetaTrace / Respaldos automáticos"), cada 15 minutos y poco después de cada cambio, conservando las 20 más recientes. Es una red de seguridad interna; no reemplaza al respaldo .json que tú exportas y guardas por tu cuenta.' },
+  { t:'Combinar (al importar)', d:'Al importar un respaldo, la opción "Combinar" agrega a tus datos actuales lo que el respaldo traiga y tú no tengas todavía, sin borrar nada; si un elemento existe en los dos, se conserva tu versión. Útil cuando la sede junta los respaldos de varias personas. La otra opción, "Reemplazar todo", cambia por completo tus datos por los del respaldo.' },
+  { t:'Avance por periodo', d:'Un cálculo, disponible desde el Panel general, que compara el % de avance de cada actividad entre dos fechas que tú eliges, usando el histórico de "Registrar avance". Muestra cuánto se movió cada actividad en ese periodo — pensado para armar un informe trimestral o semestral.' },
   { t:'Financiamiento / Origen del presupuesto', d:'De dónde viene el dinero que financia un proyecto: cooperación internacional, fondos propios, una alianza público-privada, etc. Útil para informes de rendición de cuentas.' },
   { t:'Respaldo (.json)', d:'Una copia completa de toda la información de MetaTrace que puedes descargar y guardar. Como los datos viven solo en este dispositivo, exportar el respaldo con frecuencia es la única forma de no perderlos si cambias de computador o reinstalas este dispositivo.' },
   { t:'Aviso de nueva versión disponible', d:'Un mensaje que aparece al abrir MetaTrace instalada como app de escritorio, si existe una versión más nueva publicada. Solo consulta cuál es el número de versión más reciente — nunca envía tus datos — y no instala nada de forma automática: tú decides si ir a la página de descarga o seguir con la versión actual.' },
