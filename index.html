@@ -342,6 +342,8 @@
   .papelera-info b{ font-size:12.5px; color: var(--color-primary); }
   .papelera-info span{ font-size:11px; color: var(--color-text-soft); }
   .papelera-acciones{ display:flex; gap:6px; align-items:center; }
+  .lote-input{ padding:6px 8px; border:1px solid var(--color-border); border-radius:6px; font-size:12.5px; font-family:inherit; background: var(--color-surface-alt); color: var(--color-text); }
+  .lote-input:focus{ outline:none; border-color: var(--color-secondary); }
   .range-row{ display:flex; align-items:center; gap:12px; }
   .range-row input[type=range]{ flex:1; }
   .range-val{ font-family: var(--font-display); font-weight:700; color: var(--color-primary); font-size:14px; width:46px; text-align:right; }
@@ -1657,6 +1659,88 @@ function copiarTablaPeriodo(desde, hasta){
   }catch(e){ fallback(); }
 }
 
+/* ---------------- Registrar avances en lote (paper -> app) ---------------- */
+let _loteTipo = 'proyecto', _loteValor = '', _loteIncluirTerm = false;
+function abrirAvancesLote(){ _loteTipo = 'proyecto'; _loteValor = ''; _loteIncluirTerm = false; openModal(formAvancesLote()); }
+function loteOpcionesValor(){
+  if(_loteTipo === 'area') return Array.from(new Set(Store.data.actividades.map(a=>a.areaResponsable).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'es')).map(v=>({v, l:v}));
+  if(_loteTipo === 'responsable') return Store.data.responsables.map(r=>({v:r.id, l:r.nombre}));
+  return Store.data.proyectos.map(p=>({v:p.id, l:p.nombre}));
+}
+function loteActividades(){
+  let acts = Store.data.actividades.slice();
+  if(_loteTipo === 'proyecto') acts = acts.filter(a=>a.proyectoId === _loteValor);
+  else if(_loteTipo === 'area') acts = acts.filter(a=>(a.areaResponsable||'') === _loteValor);
+  else if(_loteTipo === 'responsable') acts = acts.filter(a=>a.responsableId === _loteValor);
+  if(!_loteIncluirTerm) acts = acts.filter(a=>a.estado !== 'terminado');
+  return acts;
+}
+function renderLoteTabla(){
+  if(!_loteValor) return `<p class="chart-empty">Elige ${_loteTipo === 'area' ? 'un área' : (_loteTipo === 'responsable' ? 'un responsable' : 'un proyecto')} arriba.</p>`;
+  const acts = loteActividades();
+  if(!acts.length) return `<p class="chart-empty">No hay actividades ${_loteIncluirTerm ? '' : 'pendientes '}en esa selección.</p>`;
+  return `
+    <div class="table-wrap table-scroll" style="max-height:46vh; overflow-y:auto;">
+      <table><thead><tr><th>Actividad</th><th>Va</th><th>Nuevo valor</th><th>Nota (opcional)</th></tr></thead><tbody>
+      ${acts.map(a=>{
+        const esMeta = a.modoAvance === 'meta';
+        const proy = Store.get('proyectos', a.proyectoId);
+        const contexto = esMeta ? `${Number(a.metaAlcanzada)||0} de ${a.metaTotal||'?'}${a.metaUnidad?' '+esc(a.metaUnidad):''}` : `${Number(a.avance)||0}%`;
+        const inputAttr = esMeta ? `type="number" min="0" placeholder="de ${esc(String(a.metaTotal||'?'))}"` : `type="number" min="0" max="100" placeholder="%"`;
+        return `<tr>
+          <td>${esc(a.nombre)}<div class="cell-sub" style="margin:0;">${esc(proy ? proy.nombre : '')}</div></td>
+          <td style="white-space:nowrap;">${contexto}</td>
+          <td><input class="lote-input" data-lote-act="${a.id}" data-lote-meta="${esMeta?'1':''}" ${inputAttr} style="width:84px;"></td>
+          <td><input type="text" class="lote-input" data-lote-nota="${a.id}" style="width:100%; min-width:110px;"></td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+    </div>`;
+}
+function formAvancesLote(){
+  const opts = loteOpcionesValor();
+  const ultimoReg = safeLSGet('cometa_ultimo_registrado_por') || '';
+  return `
+    <h2>Registrar avances en lote</h2>
+    <p class="modal-sub">Actualiza el avance de varias actividades a la vez — ideal para transcribir lo que un área o responsable te devolvió en papel. Solo se guardan las filas donde escribas un valor nuevo.</p>
+    <div class="field field-row">
+      <div>
+        <label>Actividades de...</label>
+        <select id="loteAlcanceTipo">
+          <option value="proyecto" ${_loteTipo==='proyecto'?'selected':''}>Un proyecto</option>
+          <option value="area" ${_loteTipo==='area'?'selected':''}>Un área</option>
+          <option value="responsable" ${_loteTipo==='responsable'?'selected':''}>Un responsable</option>
+        </select>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <select id="loteAlcanceValor">
+          <option value="">Elige...</option>
+          ${opts.map(o=>`<option value="${esc(o.v)}" ${o.v===_loteValor?'selected':''}>${esc(o.l)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="field field-row">
+      <div><label>Fecha del registro</label><input type="date" id="loteFecha" value="${todayISO()}"></div>
+      <div><label>Registrado por (opcional)</label><input type="text" id="loteRegistradoPor" value="${esc(ultimoReg)}" placeholder="Nombre"></div>
+    </div>
+    <label class="checkbox-label" style="margin-bottom:6px;"><input type="checkbox" id="loteIncluirTerm" ${_loteIncluirTerm?'checked':''}> Incluir también las actividades ya terminadas</label>
+    <div id="loteTabla" style="margin-top:12px;">${renderLoteTabla()}</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-text" data-action="close-modal">Cancelar</button>
+      <button type="button" class="btn btn-primary" data-action="guardar-avances-lote">Guardar avances</button>
+    </div>`;
+}
+function refrescarLote(){
+  if(!modal.querySelector('#loteAlcanceTipo')) return;
+  const f = modal.querySelector('#loteFecha')?.value;
+  const r = modal.querySelector('#loteRegistradoPor')?.value;
+  modal.innerHTML = formAvancesLote();
+  if(f && modal.querySelector('#loteFecha')) modal.querySelector('#loteFecha').value = f;
+  if(r && modal.querySelector('#loteRegistradoPor')) modal.querySelector('#loteRegistradoPor').value = r;
+}
+function refrescarLoteTabla(){ const el = modal.querySelector('#loteTabla'); if(el) el.innerHTML = renderLoteTabla(); }
+
 function viewDashboard(){
   const acts = Store.data.actividades;
   const proyectos = Store.data.proyectos;
@@ -2344,7 +2428,10 @@ function viewActividades(){
         <h1>Actividades</h1>
         <p>Registra actividades, plazos y avance. El semáforo se calcula automáticamente.</p>
       </div>
-      <button class="btn btn-accent" data-action="new-actividad" ${Store.data.proyectos.length?'':'disabled'}>+ Nueva actividad</button>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-outline" data-action="avances-lote" ${Store.data.actividades.length?'':'disabled'}>📋 Registrar avances en lote</button>
+        <button class="btn btn-accent" data-action="new-actividad" ${Store.data.proyectos.length?'':'disabled'}>+ Nueva actividad</button>
+      </div>
     </div>
     ${!Store.data.proyectos.length ? emptyState('Primero crea un proyecto', 'Las actividades siempre pertenecen a un proyecto.') : ''}
     ${searchBar('actividades', 'Buscar actividad por nombre, proyecto, resultado, área, responsable...', all.length, rows.length)}
@@ -3044,6 +3131,10 @@ document.addEventListener('change', (e)=>{
     formatoIncluirCompletadas = e.target.checked;
     return;
   }
+  // Registrar avances en lote
+  if(e.target.id === 'loteAlcanceTipo'){ _loteTipo = e.target.value; _loteValor = ''; refrescarLote(); return; }
+  if(e.target.id === 'loteAlcanceValor'){ _loteValor = e.target.value; refrescarLoteTabla(); return; }
+  if(e.target.id === 'loteIncluirTerm'){ _loteIncluirTerm = e.target.checked; refrescarLoteTabla(); return; }
 });
 
 /* ---------------- Event binding (delegado, cubre también el contenido del modal) ---------------- */
@@ -3132,6 +3223,33 @@ function handleAction(action, id, idx){
   if(action==='ver-introduccion'){ mostrarBienvenida(true); return; }
   if(action==='borrar-ejemplo'){ borrarEjemploYEmpezar(); return; }
   if(action==='abrir-periodo'){ abrirPeriodo(); return; }
+  if(action==='avances-lote'){ abrirAvancesLote(); return; }
+  if(action==='guardar-avances-lote'){
+    const fecha = document.getElementById('loteFecha')?.value || todayISO();
+    const registradoPor = (document.getElementById('loteRegistradoPor')?.value || '').trim();
+    const cambios = [];
+    modal.querySelectorAll('[data-lote-act]').forEach(inp=>{
+      const raw = (inp.value || '').trim();
+      if(raw === '') return;
+      const act = Store.get('actividades', inp.dataset.loteAct);
+      if(!act) return;
+      const nota = (modal.querySelector('[data-lote-nota="' + inp.dataset.loteAct + '"]')?.value || '').trim();
+      if(inp.dataset.loteMeta){
+        cambios.push({ act, datos: { fecha, nota, registradoPor, metaTotal: Number(act.metaTotal)||0, metaAlcanzada: Number(raw)||0, metaUnidad: act.metaUnidad } });
+      } else {
+        cambios.push({ act, datos: { fecha, nota, registradoPor, avance: Number(raw)||0 } });
+      }
+    });
+    if(!cambios.length){ showToast('No escribiste ningún valor nuevo'); return; }
+    pushUndo('registro de avances en lote');
+    cambios.forEach(c=> aplicarAvanceActividad(c.act, c.datos));
+    Store.save();
+    if(registradoPor) safeLSSet('cometa_ultimo_registrado_por', registradoPor);
+    closeModal();
+    renderView();
+    showToast(`${cambios.length} avance(s) registrado(s)`, { accion:{ label:'Deshacer', fn: deshacer }, duracion: 7000 });
+    return;
+  }
   if(action==='calcular-periodo'){
     _periodoDesde = document.getElementById('periodoDesde')?.value || '';
     _periodoHasta = document.getElementById('periodoHasta')?.value || '';
