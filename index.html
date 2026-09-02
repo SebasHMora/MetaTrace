@@ -247,6 +247,12 @@
   tbody tr:last-child td{ border-bottom:none; }
   tbody tr:hover{ background: var(--color-surface-alt); }
   .table-scroll{ overflow-x:auto; }
+  /* Listas largas (solo en pantallas anchas): la tabla scrollea dentro de su caja y el
+     encabezado queda fijo arriba. Las tablas cortas no alcanzan el tope y no scrollean. */
+  @media (min-width: 881px){
+    .table-scroll{ max-height: min(72vh, 680px); overflow-y: auto; }
+    .table-scroll thead th{ position: sticky; top: 0; z-index: 3; box-shadow: 0 1px 0 var(--color-border); }
+  }
   .empty-row td{ text-align:center; color: var(--color-text-soft); padding: 30px 14px; font-size:13px; }
   .cell-sub{ font-size:11px; color: var(--color-text-soft); max-width:200px; margin-top:3px; }
   .cell-sub b{ color: var(--color-text); }
@@ -795,7 +801,9 @@ function programarRespaldoAuto(){
 /* ---------------- Semáforo de actividades (actividades / proyectos) ---------------- */
 // Devuelve {code, label} donde code es verde|amarillo|rojo|gris
 function calcularSemaforo(act){
-  if(act.estadoManual) return SEMAFORO_DEFS[act.estadoManual];
+  // estadoManual solo cuenta si es uno de los códigos válidos (un respaldo editado a mano
+  // podría traer un valor raro; en ese caso lo ignoramos y calculamos automáticamente).
+  if(act.estadoManual && SEMAFORO_DEFS[act.estadoManual]) return SEMAFORO_DEFS[act.estadoManual];
   const avance = Number(act.avance) || 0;
   const hoy = todayISO();
   if(avance >= 100) return SEMAFORO_DEFS.verde;
@@ -1685,6 +1693,60 @@ function copiarTablaPeriodo(desde, hasta){
   }catch(e){ fallback(); }
 }
 
+// Copiar texto al portapapeles; si el navegador no deja, muestra un cuadro para copiar a mano.
+function copiarTexto(texto, mensajeOk){
+  const fallback = ()=> openModal(`
+    <h2>Copiar</h2>
+    <p class="modal-sub">Selecciona todo el texto y cópialo con Ctrl/Cmd+C.</p>
+    <textarea readonly onclick="this.select()" style="width:100%;height:220px;font-size:11px;font-family:inherit;">${esc(texto)}</textarea>
+    <div class="modal-actions"><button type="button" class="btn btn-text" data-action="close-modal">Cerrar</button></div>`);
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(texto).then(()=>showToast(mensajeOk || 'Copiado al portapapeles'), fallback);
+    } else { fallback(); }
+  }catch(e){ fallback(); }
+}
+
+// Resumen en texto plano de un proyecto — para pegar en un correo o una minuta.
+function resumenProyectoTexto(p){
+  if(!p) return '';
+  const objEsp = Store.get('objetivosEspecificos', p.objetivoEspecificoId);
+  const objGen = objEsp ? Store.get('objetivosGenerales', objEsp.objetivoGeneralId) : null;
+  const acts = Store.data.actividades.filter(a=>a.proyectoId===p.id).slice().sort((a,b)=>(a.fechaFin||'').localeCompare(b.fechaFin||''));
+  const avg = calcularAvancePromedio(p.id);
+  const L = [];
+  L.push('PROYECTO: ' + (p.nombre || '(sin nombre)'));
+  if(objGen) L.push('Objetivo general: ' + numeroObjetivoGeneral(objGen.id) + ' — ' + objGen.nombre);
+  if(objEsp) L.push('Objetivo específico: ' + numeroObjetivoEspecifico(objEsp.id) + ' — ' + objEsp.nombre);
+  L.push('Responsable: ' + (nombreResponsableProyecto(p) || 'sin asignar'));
+  if(p.donante) L.push('Financiamiento: ' + p.donante);
+  L.push('Periodo: ' + fmtDate(p.fechaInicio) + ' a ' + fmtDate(p.fechaFin));
+  L.push('Avance promedio de actividades: ' + avg + '%');
+  L.push('Semáforo de actividades: ' + calcularSemaforoProyecto(p.id).label + ' · Semáforo de proyecto: ' + calcularSemaforoIndicadoresProyecto(p.id).label);
+  if(p.descripcion) L.push('', p.descripcion.trim());
+  const resultados = Array.isArray(p.resultados) ? p.resultados : [];
+  if(resultados.length){
+    L.push('', 'RESULTADOS');
+    resultados.forEach(r=>{
+      L.push('- ' + (r.nombre || '(sin nombre)'));
+      (r.indicadores||[]).forEach(ind=>{
+        const v = (typeof indicadorValoresTexto === 'function') ? indicadorValoresTexto(ind) : null;
+        const detalle = v ? `línea base ${v.base} · meta ${v.meta} · actual ${v.anterior}` : '';
+        L.push('    • ' + (ind.nombre || '(indicador)') + (detalle ? ' — ' + detalle : ''));
+      });
+    });
+  }
+  L.push('', 'ACTIVIDADES (' + acts.length + ')');
+  if(!acts.length) L.push('  (sin actividades registradas)');
+  acts.forEach(a=>{
+    const sem = calcularSemaforo(a).label;
+    L.push('- ' + (a.nombre || '(sin nombre)') + ' — ' + sem + ' · ' + (Number(a.avance)||0) + '%'
+      + (a.fechaFin ? ' · vence ' + fmtDate(a.fechaFin) : ''));
+  });
+  L.push('', 'Generado con MetaTrace el ' + fmtDate(todayISO()));
+  return L.join('\n');
+}
+
 /* ---------------- Registrar avances en lote (paper -> app) ---------------- */
 let _loteTipo = 'proyecto', _loteValor = '', _loteIncluirTerm = false;
 function abrirAvancesLote(){ _loteTipo = 'proyecto'; _loteValor = ''; _loteIncluirTerm = false; openModal(formAvancesLote()); }
@@ -1778,7 +1840,7 @@ function viewDashboard(){
   const countsProyectos = { verde:0, amarillo:0, gris:0 };
   proyectos.forEach(p=>{ countsProyectos[calcularSemaforoIndicadoresProyecto(p.id).code]++; });
 
-  const actsSinResultado = acts.filter(a=>!a.resultadoId).length;
+  const actsSinResultado = acts.filter(a=>!a.resultadoId && !a.omitirAlertaResultado).length;
 
   const hoy = todayISO();
   const limiteProximo = (()=>{ const d = new Date(); d.setDate(d.getDate() + 15); return d.toISOString().slice(0,10); })();
@@ -2109,6 +2171,7 @@ function viewProyectos(){
                 <td>${chip(semInd)}</td>
                 <td><div class="row-actions">
                   <button class="icon-btn" data-action="quick-avance-proyecto" data-id="${p.id}" title="Registrar avance de un indicador">📈</button>
+                  <button class="icon-btn" data-action="copiar-proyecto" data-id="${p.id}" title="Copiar un resumen del proyecto (para pegar en un correo)">📋</button>
                   <button class="icon-btn" data-action="ver-reporte" data-id="${p.id}" title="Ver reporte imprimible / PDF">🖨️</button>
                   <button class="icon-btn" data-action="edit-proyecto" data-id="${p.id}" title="Editar">✎</button>
                   <button class="icon-btn" data-action="del-proyecto" data-id="${p.id}" title="Eliminar">🗑</button>
@@ -2548,6 +2611,10 @@ function formActividad(existing){
             <select name="resultadoId" id="selResultado">${resOpts}</select>
           </div>
         </div>
+        <label class="checkbox-label" style="margin:-6px 0 14px; font-size:12px;">
+          <input type="checkbox" name="omitirAlertaResultado" ${a.omitirAlertaResultado ? 'checked' : ''}>
+          Esta actividad no necesita vincularse a un resultado (no la cuentes como pendiente en el Panel general)
+        </label>
         <div class="field field-row">
           <div>
             <label>Área responsable</label>
@@ -2789,6 +2856,7 @@ function viewResponsables(){
                 <td>${esc(r.contacto||'—')}</td>
                 <td>${nAct}</td>
                 <td><div class="row-actions">
+                  <button class="icon-btn" data-action="ver-reporte-responsable" data-id="${r.id}" title="Ver reporte imprimible de sus actividades">🖨️</button>
                   <button class="icon-btn" data-action="edit-responsable" data-id="${r.id}" title="Editar">✎</button>
                   <button class="icon-btn" data-action="del-responsable" data-id="${r.id}" title="Eliminar">🗑</button>
                 </div></td>
@@ -3264,6 +3332,12 @@ function handleAction(action, id, idx){
   if(action==='borrar-ejemplo'){ borrarEjemploYEmpezar(); return; }
   if(action==='abrir-periodo'){ abrirPeriodo(); return; }
   if(action==='avances-lote'){ abrirAvancesLote(); return; }
+  if(action==='copiar-proyecto'){
+    const p = Store.get('proyectos', id);
+    if(p) copiarTexto(resumenProyectoTexto(p), 'Resumen del proyecto copiado');
+    return;
+  }
+  if(action==='ver-reporte-responsable'){ abrirReporteResponsable(id); return; }
   if(action==='guardar-avances-lote'){
     const fecha = document.getElementById('loteFecha')?.value || todayISO();
     const registradoPor = (document.getElementById('loteRegistradoPor')?.value || '').trim();
@@ -3603,6 +3677,8 @@ document.addEventListener('submit', (e)=>{
       } else if(Number(data.avance) >= 100){
         data.estado = 'terminado';
       }
+      // Checkbox: FormData solo la trae si está marcada -> convertir a booleano explícito
+      data.omitirAlertaResultado = !!fd.get('omitirAlertaResultado');
     }
 
     if(coll === 'proyectos'){
@@ -4046,6 +4122,54 @@ function abrirVentanaReporte(html){
   w.document.open();
   w.document.write(html);
   w.document.close();
+}
+
+function abrirReporteResponsable(respId){
+  const r = Store.get('responsables', respId);
+  if(!r){ showToast('No se encontró el responsable'); return; }
+  const acts = Store.data.actividades.filter(a=>a.responsableId===respId);
+  const proyMap = Object.fromEntries(Store.data.proyectos.map(p=>[p.id, p.nombre]));
+  const porProy = {};
+  acts.forEach(a=>{ (porProy[a.proyectoId] = porProy[a.proyectoId] || []).push(a); });
+  const cuentas = { verde:0, amarillo:0, rojo:0, gris:0 };
+  acts.forEach(a=>{ cuentas[calcularSemaforo(a).code]++; });
+
+  const info = `
+    <div class="rep-info-grid">
+      <div class="rep-info-card"><div class="lbl">Rol</div><div class="val">${esc(r.rol||'—')}</div></div>
+      <div class="rep-info-card"><div class="lbl">Área</div><div class="val">${esc(r.area||'—')}</div></div>
+      <div class="rep-info-card"><div class="lbl">Contacto</div><div class="val">${esc(r.contacto||'—')}</div></div>
+      <div class="rep-info-card"><div class="lbl">Actividades asignadas</div><div class="val">${acts.length}</div></div>
+      <div class="rep-info-card"><div class="lbl">Retrasadas / En proceso</div><div class="val">${cuentas.rojo} / ${cuentas.amarillo}</div></div>
+      <div class="rep-info-card"><div class="lbl">Ejecutadas / No iniciadas</div><div class="val">${cuentas.verde} / ${cuentas.gris}</div></div>
+    </div>`;
+
+  let cuerpo;
+  if(!acts.length){
+    cuerpo = `<p class="rep-empty">Esta persona no tiene actividades asignadas.</p>`;
+  } else {
+    cuerpo = Object.keys(porProy).map(pid=>{
+      const filas = porProy[pid].slice().sort((a,b)=>(a.fechaFin||'').localeCompare(b.fechaFin||'')).map(a=>`
+        <tr>
+          <td>${esc(a.nombre||'(sin nombre)')}${a.notas?`<div class="rep-subtext">${esc(a.notas)}</div>`:''}</td>
+          <td>${fmtDate(a.fechaInicio)} – ${fmtDate(a.fechaFin)}</td>
+          <td>${barraReporte(Number(a.avance)||0)}</td>
+          <td>${a.estado==='terminado'?'Terminado':'Pendiente'}</td>
+          <td>${chipReporte(calcularSemaforo(a))}</td>
+        </tr>`).join('');
+      return `
+        <div class="rep-subseccion-titulo">🗂️ ${esc(proyMap[pid] || 'Proyecto no encontrado')}</div>
+        <table class="rep-table">
+          <thead><tr><th>Actividad</th><th>Fechas</th><th>Avance</th><th>Estado</th><th>Semáforo</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>`;
+    }).join('');
+  }
+
+  const html = construirDocumentoReporte(
+    `Reporte — ${r.nombre} · MetaTrace`, r.nombre,
+    'Actividades asignadas — reporte de seguimiento', info + cuerpo);
+  abrirVentanaReporte(html);
 }
 
 function abrirReporteProyecto(proyectoId){
@@ -4800,9 +4924,17 @@ fileImport.addEventListener('change', ()=>{
   fileImport.value = '';
 });
 
-// Atajos de teclado: Escape cierra el modal; Ctrl/Cmd+Z deshace (fuera de campos de texto)
+// Atajos de teclado: Escape cierra el modal; Ctrl/Cmd+Z deshace; Ctrl/Cmd+Enter envía el formulario abierto.
 document.addEventListener('keydown', (e)=>{
   if(e.key === 'Escape' && overlay.classList.contains('open')){ closeModal(); return; }
+  if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
+    const form = e.target && e.target.closest && e.target.closest('form');
+    if(form){
+      const btn = form.querySelector('button[type="submit"], input[type="submit"]');
+      if(btn){ e.preventDefault(); btn.click(); }
+    }
+    return;
+  }
   if((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey && !e.altKey){
     const t = e.target;
     if(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
