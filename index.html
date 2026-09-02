@@ -147,6 +147,7 @@
   .backup-banner .icon-btn:hover{ background: rgba(0,0,0,0.06); color:#6B4A16; }
   .backup-banner.is-error{ background:#F7E4E1; border-color:#E3AFA6; color:#7A241A; }
   .backup-banner.is-error .icon-btn:hover{ background: rgba(0,0,0,0.06); color:#7A241A; }
+  .ejemplo-banner{ background: var(--color-primary-soft); border-color: var(--color-border); color: var(--color-text); }
 
   .page-head{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom: 22px; flex-wrap:wrap; }
   .page-head h1{ font-size: 25px; }
@@ -627,6 +628,7 @@
 
   <main>
     <div id="backupBanner" class="backup-banner" style="display:none;"></div>
+    <div id="ejemploBanner" class="backup-banner ejemplo-banner" style="display:none;"></div>
     <div class="mobile-tools">
       <button class="btn btn-outline btn-sm" id="btnExportM">Respaldo</button>
       <button class="btn btn-outline btn-sm" id="btnExcelM">Excel</button>
@@ -763,6 +765,7 @@ function deshacer(){
     renderView();
     actualizarBotonDeshacer();
     if(typeof actualizarBotonPapelera === 'function') actualizarBotonPapelera();
+    if(typeof actualizarBannerEjemplo === 'function') actualizarBannerEjemplo();
     showToast('Se deshizo: ' + u.label);
   }catch(e){ showToast('No se pudo deshacer ese cambio'); }
 }
@@ -1500,6 +1503,7 @@ function viewAcercaDe(){
         <h1>Acerca de</h1>
         <p>Quién desarrolló MetaTrace y cómo se maneja tu información.</p>
       </div>
+      <button class="btn btn-outline btn-sm" data-action="ver-introduccion">Ver introducción</button>
     </div>
     <div class="about-card">
       ${logoSrc ? `<img class="about-logo" src="${logoSrc}" alt="Logo de COMETA">` : ''}
@@ -3044,6 +3048,10 @@ function handleAction(action, id, idx){
   }
   if(action==='restaurar-papelera'){ restaurarDePapelera(id); return; }
   if(action==='borrar-papelera'){ borrarDePapelera(id); return; }
+  if(action==='onboarding-ejemplo'){ cargarDatosEjemplo(); return; }
+  if(action==='onboarding-cero'){ empezarDeCero(); return; }
+  if(action==='ver-introduccion'){ mostrarBienvenida(true); return; }
+  if(action==='borrar-ejemplo'){ borrarEjemploYEmpezar(); return; }
   if(action==='limpiar-filtros'){
     if(tableState[id]){
       tableState[id].filtros = {};
@@ -4652,6 +4660,145 @@ function initUIZoom(){
   document.getElementById('btnZoomInM')?.addEventListener('click', inc);
 }
 
+/* ---------------- Bienvenida y datos de ejemplo ----------------
+   En el primer uso (app vacía y nunca vista la bienvenida) se ofrece cargar un
+   ejemplo pequeño y ficticio para explorar. Mientras el ejemplo esté cargado,
+   un aviso lo recuerda y ofrece borrarlo para empezar en limpio. */
+const ONBOARDING_LS = 'cometa_onboarding_visto';
+const EJEMPLO_LS = 'cometa_datos_son_ejemplo';
+
+// OSC ficticia y sencilla — 1 objetivo general, 2 específicos, 3 proyectos, ~11 actividades
+// en estados variados, 4 responsables en 2 áreas. Fecha de referencia: septiembre de 2026.
+const DEMO_EJEMPLO = {
+  perfil: {
+    nombreOrganizacion: 'Fundación Camino Abierto A.C.',
+    vision: 'Comunidades rurales donde todas las juventudes pueden estudiar y decidir su futuro.',
+    mision: 'Acompañamos a jóvenes de comunidades rurales y a sus familias para que concluyan la educación media superior y accedan a nuevas oportunidades.'
+  },
+  objetivosGenerales: [
+    { id:'og_ej', nombre:'Al 2027, más jóvenes de tres comunidades rurales concluyen la educación media superior y acceden a oportunidades de desarrollo.', descripcion:'El objetivo grande del que se desprende todo el trabajo de la organización.' }
+  ],
+  objetivosEspecificos: [
+    { id:'oe_ej1', objetivoGeneralId:'og_ej', nombre:'Jóvenes en riesgo de abandono escolar reciben acompañamiento y apoyo para continuar sus estudios.', descripcion:'' },
+    { id:'oe_ej2', objetivoGeneralId:'og_ej', nombre:'Familias y escuelas fortalecen su papel en la permanencia escolar de las juventudes.', descripcion:'' }
+  ],
+  responsables: [
+    { id:'resp_ej1', nombre:'Laura Méndez Ríos', rol:'Coordinadora del programa educativo', area:'Coordinación del Programa Educativo', organizacion:'Fundación Camino Abierto A.C.', contacto:'laura.mendez@caminoabierto.org' },
+    { id:'resp_ej2', nombre:'Diego Fuentes Salas', rol:'Tutor comunitario', area:'Coordinación del Programa Educativo', organizacion:'Fundación Camino Abierto A.C.', contacto:'diego.fuentes@caminoabierto.org' },
+    { id:'resp_ej3', nombre:'Ana Karen López', rol:'Facilitadora de orientación vocacional', area:'Coordinación del Programa Educativo', organizacion:'Fundación Camino Abierto A.C.', contacto:'anakaren.lopez@caminoabierto.org' },
+    { id:'resp_ej4', nombre:'Roberto Cano Díaz', rol:'Coordinador administrativo', area:'Administración', organizacion:'Fundación Camino Abierto A.C.', contacto:'roberto.cano@caminoabierto.org' }
+  ],
+  proyectos: [
+    { id:'proy_ej1', nombre:'Becas y tutorías para la permanencia escolar', descripcion:'Becas y acompañamiento semanal a jóvenes en riesgo de dejar la prepa. Cobertura: comunidades de La Ceiba, San Miguel y El Roble.', objetivoEspecificoId:'oe_ej1', responsableId:'resp_ej1', donante:'Fundación privada nacional', fechaInicio:'2025-08-01', fechaFin:'2026-12-15',
+      resultados:[
+        { id:'res_ej1', nombre:'Jóvenes becados continúan estudiando con apoyo de tutorías', estrategiasClave:'Entrega de becas, tutorías semanales, visitas a casa.', actoresClave:'Jóvenes, familias, escuelas, comité de becas.',
+          indicadores:[
+            { id:'ind_ej1', tipo:'cuantitativo', nombre:'Jóvenes con beca que permanecen en la escuela', lineaBase:'0', meta:'40', valorActual:'28', unidad:'jóvenes', nivelActual:'', historial:[
+              { fecha:'2025-09-15', tipo:'cuantitativo', nota:'Inicio de ciclo', registradoPor:'Laura Méndez Ríos', valor:12 },
+              { fecha:'2026-02-10', tipo:'cuantitativo', nota:'Corte de medio año', registradoPor:'Laura Méndez Ríos', valor:22 },
+              { fecha:'2026-08-20', tipo:'cuantitativo', nota:'Reinscripción del nuevo ciclo', registradoPor:'Laura Méndez Ríos', valor:28 }
+            ]},
+            { id:'ind_ej2', tipo:'cualitativo', nombre:'Confianza de las y los jóvenes en concluir sus estudios', lineaBase:'', meta:'', valorActual:'', unidad:'', nivelActual:'parcial', historial:[
+              { fecha:'2025-10-01', tipo:'cualitativo', nota:'Diagnóstico inicial', registradoPor:'Diego Fuentes Salas', nivel:'no_cumplido' },
+              { fecha:'2026-06-01', tipo:'cualitativo', nota:'Valoración con el grupo', registradoPor:'Diego Fuentes Salas', nivel:'parcial' }
+            ]}
+          ]}
+      ]},
+    { id:'proy_ej2', nombre:'Club de orientación vocacional', descripcion:'Espacio para que las y los jóvenes de tercero de prepa construyan un plan para después de egresar.', objetivoEspecificoId:'oe_ej1', responsableId:'resp_ej3', donante:'Fondos propios y donativos', fechaInicio:'2026-02-01', fechaFin:'2026-11-30',
+      resultados:[
+        { id:'res_ej2', nombre:'Jóvenes construyen un plan para después de la prepa', estrategiasClave:'Sesiones del club, ferias de opciones, acompañamiento en trámites.', actoresClave:'Jóvenes, universidades cercanas, empresas locales.',
+          indicadores:[
+            { id:'ind_ej3', tipo:'cuantitativo', nombre:'Jóvenes con plan vocacional elaborado', lineaBase:'0', meta:'30', valorActual:'12', unidad:'jóvenes', nivelActual:'', historial:[
+              { fecha:'2026-05-15', tipo:'cuantitativo', nota:'Primeros planes cerrados', registradoPor:'Ana Karen López', valor:12 }
+            ]}
+          ]}
+      ]},
+    { id:'proy_ej3', nombre:'Escuela para familias', descripcion:'Sesiones con madres, padres y personas cuidadoras sobre cómo apoyar el estudio en casa.', objetivoEspecificoId:'oe_ej2', responsableId:'resp_ej1', donante:'Cooperación internacional', fechaInicio:'2026-03-01', fechaFin:'2026-12-10',
+      resultados:[
+        { id:'res_ej3', nombre:'Familias participan en el seguimiento escolar de sus jóvenes', estrategiasClave:'Sesiones mensuales, acuerdos con las secundarias, materiales sencillos.', actoresClave:'Familias, directores de escuela, docentes.',
+          indicadores:[
+            { id:'ind_ej4', tipo:'cuantitativo', nombre:'Familias que asisten regularmente a las sesiones', lineaBase:'0', meta:'25', valorActual:'20', unidad:'familias', nivelActual:'', historial:[
+              { fecha:'2026-04-10', tipo:'cuantitativo', nota:'Primera sesión', registradoPor:'Laura Méndez Ríos', valor:14 },
+              { fecha:'2026-08-05', tipo:'cuantitativo', nota:'Cuarta sesión', registradoPor:'Laura Méndez Ríos', valor:20 }
+            ]}
+          ]}
+      ]}
+  ],
+  actividades: [
+    { id:'act_ej1', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Selección y entrega de becas del ciclo escolar', fechaInicio:'2026-07-15', fechaFin:'2026-08-15', modoAvance:'porcentaje', avance:100, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'Acta del comité de becas y lista de beneficiarios', notas:'', fechaCumplimiento:'2026-08-14', estado:'terminado', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-14', modoAvance:'porcentaje', nota:'Entrega concluida', registradoPor:'Laura Méndez Ríos', avance:100 } ] },
+    { id:'act_ej2', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej2', areaResponsable:'Coordinación del Programa Educativo', nombre:'Sesiones semanales de tutoría (agosto)', fechaInicio:'2026-08-01', fechaFin:'2026-09-20', modoAvance:'meta', avance:60, metaTotal:'5', metaAlcanzada:'3', metaUnidad:'sesiones', estadoManual:'', productoFinal:'Bitácora de tutorías', notas:'Buena asistencia en La Ceiba.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-25', modoAvance:'meta', nota:'', registradoPor:'Diego Fuentes Salas', avance:60, metaTotal:5, metaAlcanzada:3, metaUnidad:'sesiones' } ] },
+    { id:'act_ej3', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej2', areaResponsable:'Coordinación del Programa Educativo', nombre:'Visitas a casa de jóvenes en riesgo de abandono', fechaInicio:'2026-08-10', fechaFin:'2026-09-30', modoAvance:'porcentaje', avance:40, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-28', modoAvance:'porcentaje', nota:'6 de 15 visitas', registradoPor:'Diego Fuentes Salas', avance:40 } ] },
+    { id:'act_ej4', proyectoId:'proy_ej1', resultadoId:'res_ej1', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Informe de permanencia del primer semestre', fechaInicio:'2026-06-15', fechaFin:'2026-07-30', modoAvance:'porcentaje', avance:20, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Falta cerrar los datos de una comunidad.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'Se retrasó por cambio de director en una secundaria.', historial:[ { fecha:'2026-07-20', modoAvance:'porcentaje', nota:'Borrador', registradoPor:'Laura Méndez Ríos', avance:20 } ] },
+    { id:'act_ej5', proyectoId:'proy_ej2', resultadoId:'res_ej2', responsableId:'resp_ej3', areaResponsable:'Coordinación del Programa Educativo', nombre:'Taller de proyecto de vida', fechaInicio:'2026-05-05', fechaFin:'2026-06-20', modoAvance:'porcentaje', avance:100, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'Carpetas de proyecto de vida de cada participante', notas:'', fechaCumplimiento:'2026-06-18', estado:'terminado', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-06-18', modoAvance:'porcentaje', nota:'', registradoPor:'Ana Karen López', avance:100 } ] },
+    { id:'act_ej6', proyectoId:'proy_ej2', resultadoId:'res_ej2', responsableId:'resp_ej3', areaResponsable:'Coordinación del Programa Educativo', nombre:'Feria de opciones educativas y de empleo', fechaInicio:'2026-10-10', fechaFin:'2026-10-25', modoAvance:'porcentaje', avance:0, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Pendiente confirmar universidades invitadas.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[] },
+    { id:'act_ej7', proyectoId:'proy_ej2', resultadoId:'res_ej2', responsableId:'resp_ej3', areaResponsable:'Coordinación del Programa Educativo', nombre:'Acompañamiento en trámites de inscripción', fechaInicio:'2026-08-01', fechaFin:'2026-11-15', modoAvance:'porcentaje', avance:30, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-27', modoAvance:'porcentaje', nota:'', registradoPor:'Ana Karen López', avance:30 } ] },
+    { id:'act_ej8', proyectoId:'proy_ej3', resultadoId:'res_ej3', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Sesión 1 de la Escuela para familias', fechaInicio:'2026-07-20', fechaFin:'2026-08-05', modoAvance:'porcentaje', avance:100, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'Lista de asistencia y fotos', notas:'', fechaCumplimiento:'2026-08-05', estado:'terminado', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-05', modoAvance:'porcentaje', nota:'', registradoPor:'Laura Méndez Ríos', avance:100 } ] },
+    { id:'act_ej9', proyectoId:'proy_ej3', resultadoId:'res_ej3', responsableId:'resp_ej2', areaResponsable:'Coordinación del Programa Educativo', nombre:'Sesión 2: cómo apoyar el estudio en casa', fechaInicio:'2026-08-20', fechaFin:'2026-09-15', modoAvance:'porcentaje', avance:50, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-09-01', modoAvance:'porcentaje', nota:'Convocatoria enviada', registradoPor:'Diego Fuentes Salas', avance:50 } ] },
+    { id:'act_ej10', proyectoId:'proy_ej3', resultadoId:'res_ej3', responsableId:'resp_ej1', areaResponsable:'Coordinación del Programa Educativo', nombre:'Reunión con directores de las tres secundarias', fechaInicio:'2026-07-10', fechaFin:'2026-08-01', modoAvance:'porcentaje', avance:0, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'No se ha logrado juntar a los tres.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[] },
+    { id:'act_ej11', proyectoId:'proy_ej1', resultadoId:'', responsableId:'resp_ej4', areaResponsable:'Administración', nombre:'Comprobación de gastos del trimestre', fechaInicio:'2026-08-15', fechaFin:'2026-09-10', modoAvance:'porcentaje', avance:70, metaTotal:'', metaAlcanzada:'', metaUnidad:'', estadoManual:'', productoFinal:'', notas:'Faltan facturas de dos actividades.', fechaCumplimiento:'', estado:'pendiente', ajustes:'', comentariosSeguimiento:'', historial:[ { fecha:'2026-08-30', modoAvance:'porcentaje', nota:'', registradoPor:'Roberto Cano Díaz', avance:70 } ] }
+  ],
+  _papelera: []
+};
+
+function mostrarBienvenida(forzar){ openModal(formBienvenida(forzar)); }
+function formBienvenida(forzar){
+  return `
+    <h2>Te damos la bienvenida a MetaTrace</h2>
+    <p class="modal-sub">MetaTrace es el sistema donde tu organización registra su Teoría de Cambio, sus proyectos y actividades, y mide con datos si el cambio está pasando. Todo se guarda solo en este dispositivo.</p>
+    <p style="font-size:13px; line-height:1.6; margin-bottom:4px;">¿Cómo quieres empezar?</p>
+    <div style="display:flex; flex-direction:column; gap:10px; margin:12px 0;">
+      <button type="button" class="btn btn-outline import-opt" data-action="onboarding-ejemplo">
+        <b>🧭 Explorar con datos de ejemplo</b><span>Carga una organización ficticia y pequeña para que veas cómo se ve todo lleno: objetivos, proyectos, actividades, semáforos y reportes. Puedes borrar el ejemplo cuando quieras.</span>
+      </button>
+      <button type="button" class="btn btn-outline import-opt" data-action="onboarding-cero">
+        <b>📄 Empezar de cero</b><span>Vas creando tu Teoría de Cambio paso a paso. La pestaña "Guía de uso" te acompaña.</span>
+      </button>
+    </div>
+    ${ forzar ? `<div class="modal-actions"><button type="button" class="btn btn-text" data-action="close-modal">Cerrar</button></div>` : '' }`;
+}
+function cargarDatosEjemplo(){
+  pushUndo('carga de datos de ejemplo');
+  Store.data = JSON.parse(JSON.stringify(DEMO_EJEMPLO));
+  Store.data._papelera = [];
+  Store.save();
+  safeLSSet(ONBOARDING_LS, '1');
+  safeLSSet(EJEMPLO_LS, '1');
+  closeModal();
+  currentSection = 'dashboard';
+  renderNav(); renderView();
+  actualizarBotonPapelera();
+  actualizarBannerEjemplo();
+  showToast('Datos de ejemplo cargados — explóralos con calma');
+}
+function empezarDeCero(){ safeLSSet(ONBOARDING_LS, '1'); closeModal(); }
+function borrarEjemploYEmpezar(){
+  if(!confirm('Esto borrará los datos de ejemplo para que empieces con la app vacía. ¿Continuar?')) return;
+  pushUndo('borrar datos de ejemplo');
+  const pap = Array.isArray(Store.data._papelera) ? Store.data._papelera : [];
+  Store.data = { perfil:{nombreOrganizacion:'',vision:'',mision:''}, objetivosGenerales:[], objetivosEspecificos:[], proyectos:[], actividades:[], responsables:[], _papelera: pap };
+  Store.save();
+  resetCambiosDesdeRespaldo();
+  safeLSSet(EJEMPLO_LS, '');
+  currentSection = 'dashboard';
+  renderNav(); renderView();
+  actualizarBannerEjemplo();
+  showToast('Listo — la app está vacía para tu organización', { accion:{ label:'Deshacer', fn: deshacer }, duracion: 7000 });
+}
+function actualizarBannerEjemplo(){
+  const el = document.getElementById('ejemploBanner');
+  if(!el) return;
+  if(safeLSGet(EJEMPLO_LS) === '1'){
+    el.innerHTML = `
+      <span>🧭 <b>Estás viendo datos de ejemplo</b> — una organización ficticia, para que veas cómo funciona MetaTrace. Cuando quieras empezar con los datos reales de tu organización:</span>
+      <div class="backup-banner-actions">
+        <button class="btn btn-primary btn-sm" data-action="borrar-ejemplo">Borrar ejemplo y empezar</button>
+      </div>`;
+    el.style.display = 'flex';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 /* ---------------- Init ---------------- */
 renderNav();
 renderView();
@@ -4660,8 +4807,14 @@ setInterval(checkBackupReminder, 30 * 60 * 1000); // revisa cada 30 min mientras
 initUIZoom();
 actualizarBotonDeshacer();
 actualizarBotonPapelera();
+actualizarBannerEjemplo();
 const versionNoteEl = document.getElementById('versionNote');
 if(versionNoteEl) versionNoteEl.textContent = 'Versión ' + APP_VERSION;
+
+// Bienvenida en el primer uso: app vacía y nunca se vio la bienvenida
+if(!hayDatosParaRespaldar() && safeLSGet(ONBOARDING_LS) !== '1'){
+  mostrarBienvenida(false);
+}
 </script>
 </body>
 </html>
